@@ -1,0 +1,65 @@
+# Development-only overrides
+# This file is automatically merged by Docker Compose when running `docker-compose up`
+# Volumes are mounted here for hot reload during development
+# This file should NOT be used in production (override files are ignored by default)
+#
+# Note: The --pull=never flag in start:dev script prevents pulling images from registries.
+# Services will be built locally using the Dockerfiles.
+
+services:
+  # Auth Service - Development volumes for hot reload
+  auth-service:
+    build:
+      pull: false
+    volumes:
+      - ./services/auth-service/src:/app/src
+      - ./shared:/app/shared
+
+  # Restaurant Service - Development volumes for hot reload
+  restaurant-service:
+    build:
+      pull: false
+    volumes:
+      - ./services/restaurant-service/src:/app/src
+      - ./shared:/app/shared
+      - restaurant_uploads:/app/uploads
+
+  # Order Service - Development volumes for hot reload
+  order-service:
+    build:
+      pull: false
+    volumes:
+      - ./services/order-service/src:/app/src
+      - ./shared:/app/shared
+
+  # Delivery Service - Development volumes for hot reload
+  delivery-service:
+    build:
+      pull: false
+    volumes:
+      - ./services/delivery-service/src:/app/src
+      - ./shared:/app/shared
+
+  # Payment Service - Development volumes for hot reload
+  payment-service:
+    build:
+      pull: false
+    volumes:
+      - ./services/payment-service/src:/app/src
+      - ./shared:/app/shared
+
+  # Notification Service - Development volumes for hot reload
+  notification-service:
+    build:
+      pull: false
+    volumes:
+      - ./services/notification-service/src:/app/src
+      - ./shared:/app/shared
+
+  # Admin Analytics Service - Development volumes for hot reload
+  admin-analytics-service:
+    build:
+      pull: false
+    volumes:
+      - ./services/admin-analytics-service/src:/app/src
+      - ./shared:/app/shared

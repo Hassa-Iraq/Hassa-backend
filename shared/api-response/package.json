@@ -1,0 +1,16 @@
+{
+  "name": "@food-app/api-response",
+  "version": "1.0.0",
+  "description": "Shared API response utilities for standardized responses",
+  "main": "index.ts",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/express": "^4.17.21"
+  }
+}

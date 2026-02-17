@@ -1,0 +1,334 @@
+services:
+  # PostgreSQL Database
+  # Note: Default host port is 5433 to avoid conflicts with local PostgreSQL on 5432
+  # Set POSTGRES_PORT=5432 only if you've stopped your local PostgreSQL instance
+  postgres:
+    image: postgres:15-alpine
+    container_name: food-app-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-food_delivery}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    networks:
+      - food-app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: food-app-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
+    networks:
+      - food-app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Elasticsearch
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: food-app-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "${ELASTICSEARCH_PORT:-9200}:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - food-app-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Auth Service
+  # Note: Image name will be automatically replaced during deployment by CI/CD pipeline
+  auth-service:
+    build:
+      context: .
+      dockerfile: ./services/auth-service/Dockerfile
+    # Image name omitted - Docker Compose will auto-generate from build context
+    container_name: food-app-auth-service
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${AUTH_SERVICE_PORT:-3001}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-food_delivery}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SERVICE_NAME: auth-service
+    ports:
+      - "${AUTH_SERVICE_PORT:-3001}:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - food-app-network
+    restart: unless-stopped
+
+  # Restaurant Service
+  restaurant-service:
+    build:
+      context: .
+      dockerfile: ./services/restaurant-service/Dockerfile
+    # Image name omitted - Docker Compose will auto-generate from build context
+    container_name: food-app-restaurant-service
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${RESTAURANT_SERVICE_PORT:-3002}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-food_delivery}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:3001}
+      ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SERVICE_NAME: restaurant-service
+    ports:
+      - "${RESTAURANT_SERVICE_PORT:-3002}:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    volumes:
+      - restaurant_uploads:/app/uploads
+    networks:
+      - food-app-network
+    restart: unless-stopped
+
+  # Order Service
+  order-service:
+    build:
+      context: .
+      dockerfile: ./services/order-service/Dockerfile
+    # Image name omitted - Docker Compose will auto-generate from build context
+    container_name: food-app-order-service
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${ORDER_SERVICE_PORT:-3003}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-food_delivery}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:3001}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SERVICE_NAME: order-service
+    ports:
+      - "${ORDER_SERVICE_PORT:-3003}:3003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    networks:
+      - food-app-network
+    restart: unless-stopped
+
+  # Delivery Service
+  delivery-service:
+    build:
+      context: .
+      dockerfile: ./services/delivery-service/Dockerfile
+    # Image name omitted - Docker Compose will auto-generate from build context
+    container_name: food-app-delivery-service
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${DELIVERY_SERVICE_PORT:-3004}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-food_delivery}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:3001}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SERVICE_NAME: delivery-service
+    ports:
+      - "${DELIVERY_SERVICE_PORT:-3004}:3004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    networks:
+      - food-app-network
+    restart: unless-stopped
+
+  # Payment Service
+  payment-service:
+    build:
+      context: .
+      dockerfile: ./services/payment-service/Dockerfile
+    # Image name omitted - Docker Compose will auto-generate from build context
+    container_name: food-app-payment-service
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${PAYMENT_SERVICE_PORT:-3005}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-food_delivery}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:3001}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SERVICE_NAME: payment-service
+    ports:
+      - "${PAYMENT_SERVICE_PORT:-3005}:3005"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    networks:
+      - food-app-network
+    restart: unless-stopped
+
+  # Notification Service
+  notification-service:
+    build:
+      context: .
+      dockerfile: ./services/notification-service/Dockerfile
+    # Image name omitted - Docker Compose will auto-generate from build context
+    container_name: food-app-notification-service
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${NOTIFICATION_SERVICE_PORT:-3006}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-food_delivery}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:3001}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SERVICE_NAME: notification-service
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_FROM: ${SMTP_FROM:-}
+    ports:
+      - "${NOTIFICATION_SERVICE_PORT:-3006}:3006"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    networks:
+      - food-app-network
+    restart: unless-stopped
+
+  # Admin Analytics Service
+  admin-analytics-service:
+    build:
+      context: .
+      dockerfile: ./services/admin-analytics-service/Dockerfile
+    # Image name omitted - Docker Compose will auto-generate from build context
+    container_name: food-app-admin-analytics-service
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${ADMIN_ANALYTICS_SERVICE_PORT:-3007}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-food_delivery}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:3001}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SERVICE_NAME: admin-analytics-service
+    ports:
+      - "${ADMIN_ANALYTICS_SERVICE_PORT:-3007}:3007"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    networks:
+      - food-app-network
+    restart: unless-stopped
+
+  # Nginx API Gateway
+  nginx:
+    image: nginx:1.24-alpine
+    container_name: food-app-nginx
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/static:/usr/share/nginx/html:ro
+    depends_on:
+      - auth-service
+      - restaurant-service
+      - order-service
+      - delivery-service
+      - payment-service
+      - notification-service
+      - admin-analytics-service
+    networks:
+      - food-app-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  elasticsearch_data:
+  restaurant_uploads:
+
+networks:
+  food-app-network:
+    driver: bridge

@@ -1,0 +1,4 @@
+{
+  "migrations-folder": "./database/migrations",
+  "migration-file-language": "sql"
+}

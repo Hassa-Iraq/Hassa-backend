@@ -1,0 +1,67 @@
+{
+  "name": "food-delivery-platform",
+  "version": "1.0.0",
+  "description": "Food Delivery Platform - Microservices Backend",
+  "private": true,
+  "workspaces": [
+    "services/*",
+    "shared/*"
+  ],
+  "scripts": {
+    "start:all": "docker compose up",
+    "start:dev": "docker compose up --build --pull=never",
+    "stop:all": "docker compose down",
+    "restart:all": "docker compose restart",
+    "migrate": "node scripts/migrate.js up",
+    "migrate:up": "node scripts/migrate.js up",
+    "migrate:down": "node scripts/migrate.js down",
+    "migrate:create": "node scripts/migrate.js create",
+    "create-admin": "tsx scripts/create-first-admin.ts",
+    "lint": "eslint . --ext .ts --max-warnings 100",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "type-check": "for dir in services/*/ shared/*/; do if [ -f \"$dir/tsconfig.json\" ]; then echo \"Checking $dir...\" && (cd \"$dir\" && tsc --noEmit) || exit 1; fi; done",
+    "test": "jest --passWithNoTests",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "audit": "npm audit --audit-level=moderate",
+    "ci": "npm run type-check && npm run lint && npm run test && npm run audit",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "node-pg-migrate": "^6.2.2",
+    "pg": "^8.11.3"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/express": "^4.17.21",
+    "@types/jest": "^29.5.11",
+    "@types/node": "^20.10.6",
+    "@typescript-eslint/eslint-plugin": "^6.19.0",
+    "@typescript-eslint/parser": "^6.19.0",
+    "bcryptjs": "^3.0.3",
+    "dotenv-cli": "^7.4.4",
+    "eslint": "^8.56.0",
+    "husky": "^9.1.7",
+    "jest": "^29.7.0",
+    "lint-staged": "^16.2.7",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "lint-staged": {
+    "*.ts": [
+      "eslint --fix --max-warnings 50"
+    ]
+  },
+  "keywords": [
+    "microservices",
+    "food-delivery",
+    "nodejs",
+    "express"
+  ],
+  "author": "",
+  "license": "ISC"
+}

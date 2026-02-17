@@ -1,0 +1,156 @@
+name: CD Pipeline
+
+on:
+  # Trigger after CI Pipeline completes successfully on main branch
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types:
+      - completed
+    branches:
+      - main
+  # Manual trigger (for emergency deployments)
+  workflow_dispatch:
+  # Tag-based deployments (bypass CI for releases)
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  NODE_VERSION: '20'
+  REGISTRY: ghcr.io
+
+jobs:
+  # Check if CI Pipeline succeeded (only for workflow_run triggers)
+  check-ci-status:
+    name: Check CI Status
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check CI workflow conclusion
+        if: github.event_name == 'workflow_run'
+        run: |
+          if [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
+            echo "❌ CI Pipeline did not succeed. Status: ${{ github.event.workflow_run.conclusion }}"
+            echo "Skipping deployment to prevent deploying broken code."
+            exit 1
+          fi
+          echo "✅ CI Pipeline succeeded. Proceeding with deployment."
+      - name: Skip check for non-workflow_run triggers
+        if: github.event_name != 'workflow_run'
+        run: echo "ℹ️  Not a workflow_run trigger, skipping CI status check."
+
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-22.04
+    needs: [check-ci-status]
+    if: always() && (needs.check-ci-status.result == 'success' || needs.check-ci-status.result == 'skipped')
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service:
+          - auth-service
+          - restaurant-service
+          - order-service
+          - delivery-service
+          - payment-service
+          - notification-service
+          - admin-analytics-service
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # For workflow_run, checkout the commit from the triggering workflow
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
+          sha: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/food-app-${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./services/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            SERVICE_NAME=${{ matrix.service }}
+
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-22.04
+    needs: build-and-push
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # For workflow_run, checkout the commit from the triggering workflow
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
+          sha: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            export GITHUB_TOKEN=${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+            export GITHUB_OWNER=${{ github.repository_owner }}
+            export POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            export JWT_SECRET=${{ secrets.JWT_SECRET }}
+            export REPO_URL=${{ github.server_url }}/${{ github.repository }}
+            export GITHUB_ACTOR=${{ github.actor }}
+            export DEPLOY_DIR=$HOME/food-app
+            export SMTP_HOST=${{ secrets.SMTP_HOST }}
+            export SMTP_PORT=${{ secrets.SMTP_PORT }}
+            export SMTP_USER=${{ secrets.SMTP_USER }}
+            export SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
+            export SMTP_SECURE=${{ secrets.SMTP_SECURE }}
+            export SMTP_FROM=${{ secrets.SMTP_FROM }}
+            
+            if [ ! -d "$HOME/food-app" ]; then
+              echo "📥 First deployment - cloning repository..."
+              if [ -n "$GITHUB_TOKEN" ]; then
+                REPO_URL_WITH_TOKEN=$(echo "$REPO_URL" | sed "s|https://|https://${GITHUB_TOKEN}@|")
+                git clone "$REPO_URL_WITH_TOKEN" $HOME/food-app || git clone "$REPO_URL" $HOME/food-app
+              else
+                git clone "$REPO_URL" $HOME/food-app
+              fi
+            fi
+            
+            bash $HOME/food-app/scripts/deploy.sh
+
+
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          generate_release_notes: true
+          draft: false
+          prerelease: false

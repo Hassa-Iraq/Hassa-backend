@@ -1,0 +1,28 @@
+#!/bin/sh
+
+# Set up PATH for GitHub Desktop (which doesn't inherit shell PATH)
+# Try to source nvm if it exists (most reliable)
+if [ -s "$HOME/.nvm/nvm.sh" ]; then
+  . "$HOME/.nvm/nvm.sh"
+  # Use default node version or latest available
+  if [ -d "$HOME/.nvm/versions/node" ]; then
+    NODE_VERSION=$(ls -1 "$HOME/.nvm/versions/node" 2>/dev/null | tail -1)
+    if [ -n "$NODE_VERSION" ]; then
+      export PATH="$HOME/.nvm/versions/node/$NODE_VERSION/bin:$PATH"
+    fi
+  fi
+fi
+
+# Verify npm is available
+if ! command -v npm >/dev/null 2>&1; then
+  echo "Error: npm not found. Please ensure Node.js is installed and in PATH."
+  exit 1
+fi
+
+# Run type-check on all services (once)
+echo "Running type-check..."
+npm run type-check || exit 1
+
+# Run lint-staged on staged files
+echo "Running lint-staged..."
+npx lint-staged

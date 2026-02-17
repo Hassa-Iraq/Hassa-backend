@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+*.js
+*.config.js
+package-lock.json
+.env
+.env.local

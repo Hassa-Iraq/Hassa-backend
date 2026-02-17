@@ -1,0 +1,10 @@
+{
+  "name": "@food-app/swagger-config",
+  "version": "1.0.0",
+  "description": "Shared Swagger/OpenAPI configuration utility",
+  "main": "index.ts",
+  "type": "module",
+  "dependencies": {
+    "swagger-jsdoc": "^6.2.8"
+  }
+}
