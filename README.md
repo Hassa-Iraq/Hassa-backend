@@ -123,7 +123,6 @@ Test that services are responding:
 curl http://localhost/health
 curl http://localhost:3001/health
 
-# Test auth service through NGINX gateway
 curl http://localhost/api/auth/health
 curl http://localhost/api/restaurants/health
 curl http://localhost/api/orders/health
@@ -187,12 +186,10 @@ The NGINX gateway routes requests to the appropriate microservice based on URL p
 **Through API Gateway (Recommended):**
 
 ```bash
-# Auth service endpoints
 curl http://localhost/api/auth/register
 curl http://localhost/api/auth/login
 curl http://localhost/api/auth/health
 
-# Other services
 curl http://localhost/api/restaurants/health
 curl http://localhost/api/orders/health
 ```
@@ -200,7 +197,6 @@ curl http://localhost/api/orders/health
 **Direct Service Access (Development/Testing):**
 
 ```bash
-# Direct access bypasses the gateway
 curl http://localhost:3001/auth/register
 curl http://localhost:3001/health
 ```
@@ -230,7 +226,6 @@ All APIs follow a standardized response format using the shared `api-response` u
   "success": true,
   "message": "Operation successful",
   "data": {
-    // Response data here
   }
 }
 ```
@@ -269,7 +264,6 @@ import {
   HTTP_STATUS,
 } from "../../shared/api-response/index";
 
-// Success response
 return sendSuccess(
   res,
   { user: userData },
@@ -277,7 +271,6 @@ return sendSuccess(
   HTTP_STATUS.CREATED
 );
 
-// Error response
 return sendError(res, "User not found", HTTP_STATUS.NOT_FOUND);
 ```
 

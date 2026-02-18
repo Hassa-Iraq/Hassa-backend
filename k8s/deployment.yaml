@@ -64,5 +64,3 @@ spec:
     targetPort: 3001
   type: ClusterIP
 ---
-# Similar deployments for other services...
-# This is a template - duplicate and modify for each service

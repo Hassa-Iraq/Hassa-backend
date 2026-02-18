@@ -1,404 +1,394 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Food App - Service Health Dashboard</title>
-    <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
 
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          "Helvetica Neue", Arial, sans-serif;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        min-height: 100vh;
-        padding: 20px;
-      }
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Food App - Service Health Dashboard</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-      .container {
-        max-width: 1200px;
-        margin: 0 auto;
-      }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
 
-      h1 {
-        color: white;
-        text-align: center;
-        margin-bottom: 30px;
-        font-size: 2.5em;
-        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
-      }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
 
-      .services-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 20px;
-        margin-bottom: 20px;
-      }
+    h1 {
+      color: white;
+      text-align: center;
+      margin-bottom: 30px;
+      font-size: 2.5em;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+    }
 
-      .service-card {
-        background: white;
-        border-radius: 10px;
-        padding: 20px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        transition: transform 0.2s, box-shadow 0.2s;
-        cursor: pointer;
-      }
+    .services-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+      margin-bottom: 20px;
+    }
 
-      .service-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
-      }
+    .service-card {
+      background: white;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      transition: transform 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+    }
 
-      .service-card:active {
-        transform: translateY(0);
-      }
+    .service-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    }
 
-      .service-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 15px;
-      }
+    .service-card:active {
+      transform: translateY(0);
+    }
 
-      .service-name {
-        font-size: 1.2em;
-        font-weight: 600;
-        color: #333;
-      }
+    .service-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
 
-      .status-badge {
-        padding: 5px 15px;
-        border-radius: 20px;
-        font-size: 0.85em;
-        font-weight: 600;
-        text-transform: uppercase;
-      }
+    .service-name {
+      font-size: 1.2em;
+      font-weight: 600;
+      color: #333;
+    }
 
-      .status-healthy {
-        background-color: #10b981;
-        color: white;
-      }
+    .status-badge {
+      padding: 5px 15px;
+      border-radius: 20px;
+      font-size: 0.85em;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
 
-      .status-unhealthy {
-        background-color: #ef4444;
-        color: white;
-      }
+    .status-healthy {
+      background-color: #10b981;
+      color: white;
+    }
 
-      .status-checking {
-        background-color: #f59e0b;
-        color: white;
-      }
+    .status-unhealthy {
+      background-color: #ef4444;
+      color: white;
+    }
 
-      .service-details {
-        font-size: 0.9em;
-        color: #666;
-      }
+    .status-checking {
+      background-color: #f59e0b;
+      color: white;
+    }
 
-      .service-details div {
-        margin: 5px 0;
-      }
+    .service-details {
+      font-size: 0.9em;
+      color: #666;
+    }
 
-      .timestamp {
-        font-size: 0.85em;
-        color: #999;
-        margin-top: 10px;
-      }
+    .service-details div {
+      margin: 5px 0;
+    }
 
-      .error-message {
-        color: #ef4444;
-        font-size: 0.85em;
-        margin-top: 5px;
-      }
+    .timestamp {
+      font-size: 0.85em;
+      color: #999;
+      margin-top: 10px;
+    }
 
-      .refresh-btn {
-        display: block;
-        margin: 20px auto;
-        padding: 12px 30px;
-        background: white;
-        border: none;
-        border-radius: 25px;
-        font-size: 1em;
-        font-weight: 600;
-        color: #667eea;
-        cursor: pointer;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        transition: transform 0.2s, box-shadow 0.2s;
-      }
+    .error-message {
+      color: #ef4444;
+      font-size: 0.85em;
+      margin-top: 5px;
+    }
 
-      .refresh-btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
-      }
+    .refresh-btn {
+      display: block;
+      margin: 20px auto;
+      padding: 12px 30px;
+      background: white;
+      border: none;
+      border-radius: 25px;
+      font-size: 1em;
+      font-weight: 600;
+      color: #667eea;
+      cursor: pointer;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
 
-      .refresh-btn:active {
-        transform: translateY(0);
-      }
+    .refresh-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    }
 
-      .loading {
-        text-align: center;
-        color: white;
-        font-size: 1.2em;
-        margin-top: 50px;
-      }
+    .refresh-btn:active {
+      transform: translateY(0);
+    }
 
-      .summary {
-        background: rgba(255, 255, 255, 0.2);
-        backdrop-filter: blur(10px);
-        border-radius: 10px;
-        padding: 20px;
-        margin-bottom: 20px;
-        color: white;
-        text-align: center;
-      }
+    .loading {
+      text-align: center;
+      color: white;
+      font-size: 1.2em;
+      margin-top: 50px;
+    }
 
-      .summary h2 {
-        margin-bottom: 10px;
-      }
+    .summary {
+      background: rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(10px);
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+      color: white;
+      text-align: center;
+    }
 
-      .summary-stats {
-        display: flex;
-        justify-content: space-around;
-        flex-wrap: wrap;
-        gap: 20px;
-        margin-top: 15px;
-      }
+    .summary h2 {
+      margin-bottom: 10px;
+    }
 
-      .stat {
-        text-align: center;
-      }
+    .summary-stats {
+      display: flex;
+      justify-content: space-around;
+      flex-wrap: wrap;
+      gap: 20px;
+      margin-top: 15px;
+    }
 
-      .stat-value {
-        font-size: 2em;
-        font-weight: bold;
-        margin-bottom: 5px;
-      }
+    .stat {
+      text-align: center;
+    }
 
-      .stat-label {
-        font-size: 0.9em;
-        opacity: 0.9;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <h1>🍔 Food App - Service Health Dashboard</h1>
+    .stat-value {
+      font-size: 2em;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
 
-      <div class="summary" id="summary">
-        <h2>System Overview</h2>
-        <div class="summary-stats">
-          <div class="stat">
-            <div class="stat-value" id="total-services">-</div>
-            <div class="stat-label">Total Services</div>
-          </div>
-          <div class="stat">
-            <div class="stat-value" id="healthy-services">-</div>
-            <div class="stat-label">Healthy</div>
-          </div>
-          <div class="stat">
-            <div class="stat-value" id="unhealthy-services">-</div>
-            <div class="stat-label">Unhealthy</div>
-          </div>
+    .stat-label {
+      font-size: 0.9em;
+      opacity: 0.9;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>🍔 Food App - Service Health Dashboard</h1>
+
+    <div class="summary" id="summary">
+      <h2>System Overview</h2>
+      <div class="summary-stats">
+        <div class="stat">
+          <div class="stat-value" id="total-services">-</div>
+          <div class="stat-label">Total Services</div>
         </div>
-      </div>
-
-      <button class="refresh-btn" onclick="checkAllServices()">
-        🔄 Refresh Status
-      </button>
-
-      <div class="services-grid" id="services-grid">
-        <div class="loading">Loading service status...</div>
+        <div class="stat">
+          <div class="stat-value" id="healthy-services">-</div>
+          <div class="stat-label">Healthy</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="unhealthy-services">-</div>
+          <div class="stat-label">Unhealthy</div>
+        </div>
       </div>
     </div>
 
-    <script>
-      const services = [
-        {
-          name: "Auth Service",
-          path: "/api/auth/health",
-          id: "auth-service",
-          apiDocs: "/api/auth/api-docs",
-        },
-        {
-          name: "Restaurant Service",
-          path: "/api/restaurants/health",
-          id: "restaurant-service",
-          apiDocs: "/api/restaurants/api-docs",
-        },
-        {
-          name: "Order Service",
-          path: "/api/orders/health",
-          id: "order-service",
-          apiDocs: "/api/orders/api-docs",
-        },
-        {
-          name: "Delivery Service",
-          path: "/api/deliveries/health",
-          id: "delivery-service",
-          apiDocs: "/api/deliveries/api-docs",
-        },
-        {
-          name: "Payment Service",
-          path: "/api/payments/health",
-          id: "payment-service",
-          apiDocs: "/api/payments/api-docs",
-        },
-        {
-          name: "Notification Service",
-          path: "/api/notifications/health",
-          id: "notification-service",
-          apiDocs: "/api/notifications/api-docs",
-        },
-        {
-          name: "Admin Analytics Service",
-          path: "/api/admin/health",
-          id: "admin-analytics-service",
-          apiDocs: "/api/admin/api-docs",
-        },
-      ];
+    <button class="refresh-btn" onclick="checkAllServices()">
+      🔄 Refresh Status
+    </button>
 
-      async function checkServiceHealth(service) {
-        try {
-          const response = await fetch(service.path);
-          const data = await response.json();
+    <div class="services-grid" id="services-grid">
+      <div class="loading">Loading service status...</div>
+    </div>
+  </div>
 
-          const isHealthy =
-            response.ok && data.success && data.data?.status === "healthy";
+  <script>
+    const services = [
+      {
+        name: "Auth Service",
+        path: "/api/auth/health",
+        id: "auth-service",
+        apiDocs: "/api/auth/api-docs",
+      },
+      {
+        name: "Restaurant Service",
+        path: "/api/restaurants/health",
+        id: "restaurant-service",
+        apiDocs: "/api/restaurants/api-docs",
+      },
+      {
+        name: "Order Service",
+        path: "/api/orders/health",
+        id: "order-service",
+        apiDocs: "/api/orders/api-docs",
+      },
+      {
+        name: "Delivery Service",
+        path: "/api/deliveries/health",
+        id: "delivery-service",
+        apiDocs: "/api/deliveries/api-docs",
+      },
+      {
+        name: "Payment Service",
+        path: "/api/payments/health",
+        id: "payment-service",
+        apiDocs: "/api/payments/api-docs",
+      },
+      {
+        name: "Notification Service",
+        path: "/api/notifications/health",
+        id: "notification-service",
+        apiDocs: "/api/notifications/api-docs",
+      },
+      {
+        name: "Admin Analytics Service",
+        path: "/api/admin/health",
+        id: "admin-analytics-service",
+        apiDocs: "/api/admin/api-docs",
+      },
+    ];
 
-          return {
-            ...service,
-            status: isHealthy ? "healthy" : "unhealthy",
-            data: data.data || {},
-            error: null,
-          };
-        } catch (error) {
-          return {
-            ...service,
-            status: "unhealthy",
-            data: null,
-            error: error.message || "Service unavailable",
-          };
-        }
+    async function checkServiceHealth(service) {
+      try {
+        const response = await fetch(service.path);
+        const data = await response.json();
+
+        const isHealthy =
+          response.ok && data.success && data.data?.status === "healthy";
+
+        return {
+          ...service,
+          status: isHealthy ? "healthy" : "unhealthy",
+          data: data.data || {},
+          error: null,
+        };
+      } catch (error) {
+        return {
+          ...service,
+          status: "unhealthy",
+          data: null,
+          error: error.message || "Service unavailable",
+        };
+      }
+    }
+
+    function updateServiceCard(serviceInfo) {
+      const cardId = `card-${serviceInfo.id}`;
+      let card = document.getElementById(cardId);
+
+      if (!card) {
+        card = document.createElement("div");
+        card.className = "service-card";
+        card.id = cardId;
+        document.getElementById("services-grid").appendChild(card);
       }
 
-      function updateServiceCard(serviceInfo) {
-        const cardId = `card-${serviceInfo.id}`;
-        let card = document.getElementById(cardId);
-
-        if (!card) {
-          card = document.createElement("div");
-          card.className = "service-card";
-          card.id = cardId;
-          document.getElementById("services-grid").appendChild(card);
-        }
-
-        const statusClass = `status-${serviceInfo.status}`;
-        const statusText =
-          serviceInfo.status === "healthy"
-            ? "Healthy"
-            : serviceInfo.status === "unhealthy"
+      const statusClass = `status-${serviceInfo.status}`;
+      const statusText =
+        serviceInfo.status === "healthy"
+          ? "Healthy"
+          : serviceInfo.status === "unhealthy"
             ? "Unhealthy"
             : "Checking";
 
-        card.innerHTML = `
+      card.innerHTML = `
                 <div class="service-header">
                     <div class="service-name">${serviceInfo.name}</div>
                     <div class="status-badge ${statusClass}">${statusText}</div>
                 </div>
-                ${
-                  serviceInfo.data
-                    ? `
+                ${serviceInfo.data
+          ? `
                     <div class="service-details">
-                        ${
-                          serviceInfo.data.database
-                            ? `<div><strong>Database:</strong> ${serviceInfo.data.database}</div>`
-                            : ""
-                        }
-                        ${
-                          serviceInfo.data.service
-                            ? `<div><strong>Service ID:</strong> ${serviceInfo.data.service}</div>`
-                            : ""
-                        }
-                        ${
-                          serviceInfo.data.timestamp
-                            ? `<div class="timestamp">Last checked: ${new Date(
-                                serviceInfo.data.timestamp
-                              ).toLocaleString()}</div>`
-                            : ""
-                        }
-                        ${
-                          serviceInfo.error
-                            ? `<div class="error-message">Error: ${serviceInfo.error}</div>`
-                            : ""
-                        }
+                        ${serviceInfo.data.database
+            ? `<div><strong>Database:</strong> ${serviceInfo.data.database}</div>`
+            : ""
+          }
+                        ${serviceInfo.data.service
+            ? `<div><strong>Service ID:</strong> ${serviceInfo.data.service}</div>`
+            : ""
+          }
+                        ${serviceInfo.data.timestamp
+            ? `<div class="timestamp">Last checked: ${new Date(
+              serviceInfo.data.timestamp
+            ).toLocaleString()}</div>`
+            : ""
+          }
+                        ${serviceInfo.error
+            ? `<div class="error-message">Error: ${serviceInfo.error}</div>`
+            : ""
+          }
                     </div>
                 `
-                    : `
+          : `
                     <div class="service-details">
-                        <div class="error-message">${
-                          serviceInfo.error || "Unable to fetch service status"
-                        }</div>
+                        <div class="error-message">${serviceInfo.error || "Unable to fetch service status"
+          }</div>
                     </div>
                 `
-                }
+        }
             `;
 
-        // Attach click handler to navigate to API docs
-        card.onclick = () => {
-          if (serviceInfo.apiDocs) {
-            window.location.href = serviceInfo.apiDocs;
-          }
+      card.onclick = () => {
+        if (serviceInfo.apiDocs) {
+          window.location.href = serviceInfo.apiDocs;
+        }
+      };
+    }
+
+    function updateSummary(serviceResults) {
+      const total = serviceResults.length;
+      const healthy = serviceResults.filter(
+        (s) => s.status === "healthy"
+      ).length;
+      const unhealthy = total - healthy;
+
+      document.getElementById("total-services").textContent = total;
+      document.getElementById("healthy-services").textContent = healthy;
+      document.getElementById("unhealthy-services").textContent = unhealthy;
+    }
+
+    async function checkAllServices() {
+      const grid = document.getElementById("services-grid");
+      grid.innerHTML = "";
+
+      services.forEach((service) => {
+        const checkingService = {
+          ...service,
+          status: "checking",
+          data: null,
+          error: null,
         };
-      }
+        updateServiceCard(checkingService);
+      });
 
-      function updateSummary(serviceResults) {
-        const total = serviceResults.length;
-        const healthy = serviceResults.filter(
-          (s) => s.status === "healthy"
-        ).length;
-        const unhealthy = total - healthy;
+      const promises = services.map((service) => checkServiceHealth(service));
+      const results = await Promise.all(promises);
 
-        document.getElementById("total-services").textContent = total;
-        document.getElementById("healthy-services").textContent = healthy;
-        document.getElementById("unhealthy-services").textContent = unhealthy;
-      }
+      results.forEach((result) => {
+        updateServiceCard(result);
+      });
 
-      async function checkAllServices() {
-        const grid = document.getElementById("services-grid");
-        grid.innerHTML = "";
+      updateSummary(results);
+    }
 
-        // Show checking status for all services
-        services.forEach((service) => {
-          const checkingService = {
-            ...service,
-            status: "checking",
-            data: null,
-            error: null,
-          };
-          updateServiceCard(checkingService);
-        });
+    checkAllServices();
 
-        // Check all services in parallel
-        const promises = services.map((service) => checkServiceHealth(service));
-        const results = await Promise.all(promises);
+    setInterval(checkAllServices, 30000);
+  </script>
+</body>
 
-        // Update all cards
-        results.forEach((result) => {
-          updateServiceCard(result);
-        });
-
-        // Update summary
-        updateSummary(results);
-      }
-
-      // Initial load
-      checkAllServices();
-
-      // Auto-refresh every 30 seconds
-      setInterval(checkAllServices, 30000);
-    </script>
-  </body>
 </html>
