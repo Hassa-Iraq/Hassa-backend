@@ -22,7 +22,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const rootDir = join(__dirname, '..');
 
-// Load .env file manually
 function loadEnvFile() {
   try {
     const envPath = join(rootDir, '.env');
@@ -49,8 +48,6 @@ function loadEnvFile() {
 
 const env = loadEnvFile();
 
-// Create database config from environment
-// Default to localhost for local development (when not in Docker)
 const dbConfig = {
   POSTGRES_HOST: process.env.POSTGRES_HOST || env.POSTGRES_HOST || 'localhost',
   POSTGRES_PORT: parseInt(process.env.POSTGRES_PORT || env.POSTGRES_PORT || '5432'),
@@ -59,14 +56,11 @@ const dbConfig = {
   POSTGRES_PASSWORD: process.env.POSTGRES_PASSWORD || env.POSTGRES_PASSWORD || 'postgres',
 };
 
-// If host is 'postgres' (Docker service name), change to localhost for local script execution
-// This allows the script to work both in Docker and locally
 if (dbConfig.POSTGRES_HOST === 'postgres') {
   dbConfig.POSTGRES_HOST = 'localhost';
   console.log('⚠️  Detected Docker hostname "postgres", using "localhost" for local execution');
 }
 
-// Create database pool
 function createDbPool() {
   return new Pool({
     host: dbConfig.POSTGRES_HOST,
@@ -80,7 +74,6 @@ function createDbPool() {
   });
 }
 
-// Hash password using bcrypt
 async function hashPassword(password: string): Promise<string> {
   const salt = await bcrypt.genSalt(10);
   return bcrypt.hash(password, salt);
@@ -104,12 +97,9 @@ const pool = createDbPool();
 
 async function createAdminUser() {
   try {
-    // Test connection first
     console.log(`Connecting to database at ${dbConfig.POSTGRES_HOST}:${dbConfig.POSTGRES_PORT}...`);
     await pool.query('SELECT 1');
     console.log('✅ Database connection successful!\n');
-    
-    // Check if user already exists
     const existingUser = await pool.query(
       'SELECT id FROM auth.users WHERE email = $1',
       [email]
@@ -120,7 +110,6 @@ async function createAdminUser() {
       process.exit(1);
     }
 
-    // Get admin role ID
     const roleResult = await pool.query(
       "SELECT id FROM auth.roles WHERE name = $1",
       ['admin']
@@ -132,11 +121,8 @@ async function createAdminUser() {
     }
 
     const roleId = roleResult.rows[0].id;
-
-    // Hash password
     const passwordHash = await hashPassword(password);
 
-    // Create admin user
     const userResult = await pool.query(
       `INSERT INTO auth.users (email, password_hash, role_id)
        VALUES ($1, $2, $3)

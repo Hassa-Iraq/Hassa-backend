@@ -30,7 +30,6 @@ function loadEnvFile() {
 
     return env;
   } catch (error) {
-    // .env file is optional (especially in CI/CD where env vars are set directly)
     if (error.code !== "ENOENT") {
       console.error("Error loading .env file:", error.message);
     }
@@ -38,7 +37,6 @@ function loadEnvFile() {
   }
 }
 
-// Merge environment variables: process.env takes precedence over .env file
 function loadEnv() {
   const envFile = loadEnvFile();
   const merged = { ...envFile };
@@ -52,7 +50,6 @@ function loadEnv() {
   return merged;
 }
 
-// Construct DATABASE_URL from individual variables
 function getDatabaseUrl(env) {
   let host = env.POSTGRES_HOST || "localhost";
   if (host === "postgres") {
@@ -79,11 +76,9 @@ if (!databaseUrl || typeof databaseUrl !== "string") {
   process.exit(1);
 }
 
-// Get the command from process.argv (up, down, create, etc.)
 const args = process.argv.slice(2);
 const command = args[0] || "up";
 
-// Run node-pg-migrate with explicit migrations directory
 const migrationsDir = join(rootDir, "database", "migrations");
 
 const childEnv = { ...process.env, DATABASE_URL: databaseUrl };

@@ -23,20 +23,17 @@ async function initializeAdmin() {
     });
   } catch (error: any) {
     logger.error({ error: error.message }, 'Failed to initialize admin user');
-    // Don't exit - allow service to start even if admin creation fails
   }
 }
 
 const PORT = config.PORT || 3001;
 
-// Initialize admin before starting server
 initializeAdmin().then(() => {
   app.listen(PORT, () => {
     logger.info({ port: PORT, env: config.NODE_ENV }, 'Auth service started');
   });
 });
 
-// Graceful shutdown
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully');
   process.exit(0);

@@ -22,7 +22,6 @@ import { upload, getFileUrl } from "../utils/fileUpload";
 import crypto from "crypto";
 import config from "../config/index";
 
-/** Multer runs only for multipart/form-data so profile can accept file upload */
 function optionalProfileUpload(req: Request, res: Response, next: NextFunction): void {
   const contentType = req.headers["content-type"] || "";
   if (contentType.includes("multipart/form-data")) {
@@ -394,7 +393,6 @@ router.post(
   asyncHandler(async (req: RequestWithLogger, res: Response) => {
     const { email, password, phone, country_code, role = "customer" }: RegisterBody = req.body;
 
-    // Normalize phone number (combine country code if provided)
     let normalizedPhone: string;
     if (country_code) {
       normalizedPhone = combineCountryCodeAndPhone(country_code, phone);
@@ -402,14 +400,11 @@ router.post(
       normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`;
     }
 
-    // Validate phone format
     if (!validatePhoneFormat(normalizedPhone)) {
       throw new ValidationError("Validation failed", [
         createFieldError("phone", "Invalid phone number format. Please use E.164 format (e.g., +1234567890)"),
       ]);
     }
-
-    // Check if user already exists - check email and phone separately
     const existingEmail = await pool.query<{ id: string }>(
       "SELECT id FROM auth.users WHERE email = $1",
       [email]
@@ -435,7 +430,6 @@ router.post(
       ]);
     }
 
-    // Get role ID
     const roleResult = await pool.query<{ id: string }>(
       "SELECT id FROM auth.roles WHERE name = $1",
       [role]
@@ -448,11 +442,8 @@ router.post(
     }
 
     const roleId = roleResult.rows[0].id;
-
-    // Hash password
     const passwordHash = await hashPassword(password);
 
-    // Create user with terms acceptance timestamp
     await pool.query(
       `INSERT INTO auth.users (email, phone, password_hash, role_id, terms_accepted_at)
        VALUES ($1, $2, $3, $4, $5)`,
@@ -465,7 +456,6 @@ router.post(
     );
     const user = userResult.rows[0];
 
-    // Generate and send signup OTP
     let generatedOtp: string | null = null;
     try {
       const otp = await generateAndStoreOTP(
@@ -473,11 +463,10 @@ router.post(
         user.id,
         normalizedPhone,
         'signup_phone',
-        10 // 10 minutes expiry
+        10
       );
-      generatedOtp = otp; // Store OTP for response
+      generatedOtp = otp;
 
-      // Send OTP via notification service as SMS
       try {
         const notificationServiceUrl = config.NOTIFICATION_SERVICE_URL || 'http://notification-service:3006';
         const smsText = `Your Food App verification code is: ${otp}. It will expire in 10 minutes. Do not share this code with anyone.`;
@@ -507,7 +496,6 @@ router.post(
       }
     } catch (error: any) {
       req.logger?.error({ error: error.message, userId: user.id }, 'Error generating signup OTP');
-      // Continue even if OTP generation fails - user can request resend
     }
 
     return sendSuccess(
@@ -516,7 +504,6 @@ router.post(
         user: toUserResponse(user),
         requires_verification: true,
         verification_method: "phone_otp",
-        // Include OTP in response
         ...(generatedOtp ? {
           otp: generatedOtp,
         } : {}),
