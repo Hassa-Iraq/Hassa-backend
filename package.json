@@ -23,7 +23,7 @@
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "audit": "npm audit --audit-level=moderate",
+    "audit": "npm audit --audit-level=critical",
     "ci": "npm run type-check && npm run lint && npm run test && npm run audit"
   },
   "dependencies": {
@@ -48,6 +48,13 @@
   "engines": {
     "node": ">=20.0.0",
     "npm": ">=10.0.0"
+  },
+  "overrides": {
+    "ajv": "6.14.0",
+    "qs": "6.14.2",
+    "fast-xml-parser": "4.3.4",
+    "nodemailer": "8.0.1",
+    "lodash": "4.17.23"
   },
   "lint-staged": {
     "*.ts": [
