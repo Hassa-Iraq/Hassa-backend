@@ -14,6 +14,18 @@ import { authenticate, authorize } from "../middleware/auth";
 
 const router = express.Router();
 
+/**
+ * Generate a random coupon code
+ */
+function generateCouponCode(length: number = 8): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let result = "";
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
 router.post(
   "/",
   authenticate,
