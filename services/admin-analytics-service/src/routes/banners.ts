@@ -13,123 +13,7 @@ import { authenticate, authorize } from "../middleware/auth";
 
 const router = express.Router();
 
-/**
- * @swagger
- * components:
- *   schemas:
- *     Banner:
- *       type: object
- *       properties:
- *         id:
- *           type: string
- *           format: uuid
- *         restaurant_id:
- *           type: string
- *           format: uuid
- *         banner_name:
- *           type: string
- *         banner_image_url:
- *           type: string
- *         description:
- *           type: string
- *           nullable: true
- *         quote_amount:
- *           type: number
- *           format: decimal
- *           nullable: true
- *         quote_currency:
- *           type: string
- *           default: USD
- *         status:
- *           type: string
- *           enum: [requested, quoted, approved, rejected, cancelled]
- *         is_public:
- *           type: boolean
- *           description: Whether the banner is visible in the public banners API
- *         public_at:
- *           type: string
- *           format: date-time
- *           nullable: true
- *           description: Timestamp when the banner was marked public
- *         requested_by_user_id:
- *           type: string
- *           format: uuid
- *         approved_by_user_id:
- *           type: string
- *           format: uuid
- *           nullable: true
- *         requested_at:
- *           type: string
- *           format: date-time
- *         approved_at:
- *           type: string
- *           format: date-time
- *           nullable: true
- *         valid_from:
- *           type: string
- *           format: date-time
- *           nullable: true
- *         valid_to:
- *           type: string
- *           format: date-time
- *           nullable: true
- *         created_at:
- *           type: string
- *           format: date-time
- *         updated_at:
- *           type: string
- *           format: date-time
- * tags:
- *   - name: Banners
- *     description: Banner management endpoints (Admin)
- */
-
 // ==================== ADMIN ENDPOINTS ====================
-
-/**
- * @swagger
- * /banners:
- *   get:
- *     summary: List all banner requests (Admin only)
- *     description: Returns all banner requests across all restaurants with filtering options. Admin can filter approved banners and public/non-public banners.
- *     tags: [Banners]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: status
- *         schema:
- *           type: string
- *           enum: [requested, quoted, approved, rejected, cancelled]
- *         description: Filter by status (optional)
- *       - in: query
- *         name: restaurant_id
- *         schema:
- *           type: string
- *           format: uuid
- *         description: Filter by restaurant ID (optional)
- *       - in: query
- *         name: is_public
- *         schema:
- *           type: boolean
- *         description: Filter by public visibility (true = public, false = not public)
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           minimum: 1
- *           default: 1
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 100
- *           default: 20
- *     responses:
- *       200:
- *         description: List of all banner requests
- */
 router.get(
   "/banners",
   authenticate,
@@ -246,29 +130,6 @@ router.get(
     });
   })
 );
-
-/**
- * @swagger
- * /banners/{id}:
- *   get:
- *     summary: Get banner details (Admin only)
- *     description: Get details of a specific banner request
- *     tags: [Banners]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: Banner details
- *       404:
- *         description: Banner not found
- */
 router.get(
   "/banners/:id",
   authenticate,
@@ -293,47 +154,6 @@ router.get(
     return sendSuccess(res, { banner: result.rows[0] });
   })
 );
-
-/**
- * @swagger
- * /banners/{id}/quote:
- *   patch:
- *     summary: Set quote for a banner request (Admin only)
- *     description: Admin sets the quote amount for a banner request. Status changes to 'quoted'
- *     tags: [Banners]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - quote_amount
- *             properties:
- *               quote_amount:
- *                 type: number
- *                 format: decimal
- *                 minimum: 0
- *               quote_currency:
- *                 type: string
- *                 default: USD
- *     responses:
- *       200:
- *         description: Quote set successfully, banner status changed to 'quoted'
- *       400:
- *         description: Banner is not in 'requested' status
- *       404:
- *         description: Banner not found
- */
 router.patch(
   "/banners/:id/quote",
   authenticate,
@@ -393,31 +213,6 @@ router.patch(
     return sendSuccess(res, { banner: updateResult.rows[0] });
   })
 );
-
-/**
- * @swagger
- * /banners/{id}/public:
- *   patch:
- *     summary: Mark banner as public (Admin only)
- *     description: Marks an approved banner as public so it appears in the public banners API. Only approved banners can be made public.
- *     tags: [Banners]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: Banner marked as public
- *       400:
- *         description: Banner is not approved
- *       404:
- *         description: Banner not found
- */
 router.patch(
   "/banners/:id/public",
   authenticate,
@@ -463,29 +258,6 @@ router.patch(
     return sendSuccess(res, { banner: updateResult.rows[0] });
   })
 );
-
-/**
- * @swagger
- * /banners/{id}/unpublic:
- *   patch:
- *     summary: Mark banner as not public (Admin only)
- *     description: Marks a banner as not public so it no longer appears in the public banners API.
- *     tags: [Banners]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: Banner marked as not public
- *       404:
- *         description: Banner not found
- */
 router.patch(
   "/banners/:id/unpublic",
   authenticate,

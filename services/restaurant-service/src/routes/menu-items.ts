@@ -14,7 +14,6 @@ import { authenticate, authorize } from '../middleware/auth';
 import { cache, cacheKeys } from '../utils/redis';
 import { indexMenuItem, deleteMenuItemFromIndex } from '../utils/elasticsearch';
 import { ForbiddenError } from 'shared/error-handler/index';
-
 const router = express.Router();
 
 /**
@@ -35,228 +34,6 @@ async function validateRestaurantOwnership(restaurantId: string, userId: string)
   }
 }
 
-/**
- * @swagger
- * components:
- *   schemas:
- *     MenuItem:
- *       type: object
- *       properties:
- *         id:
- *           type: string
- *           format: uuid
- *         restaurant_id:
- *           type: string
- *           format: uuid
- *         category_id:
- *           type: string
- *           format: uuid
- *           nullable: true
- *         name:
- *           type: string
- *         description:
- *           type: string
- *         price:
- *           type: number
- *           format: decimal
- *         image_url:
- *           type: string
- *         is_available:
- *           type: boolean
- *         prep_time_minutes:
- *           type: integer
- *           description: Item preparation estimated time in minutes
- *         discount_type:
- *           type: string
- *           enum: [fixed, percentage]
- *           description: Discount type - 'fixed' or 'percentage'
- *         discount_value:
- *           type: number
- *           format: decimal
- *           description: Discount value (fixed amount or percentage)
- *         max_purchase_quantity:
- *           type: integer
- *           description: Maximum purchase quantity limit
- *         stock_type:
- *           type: string
- *           enum: [unlimited, limited, daily]
- *           description: Stock management type
- *           default: unlimited
- *         stock:
- *           type: integer
- *           description: Current stock quantity (null for unlimited)
- *         search_tags:
- *           type: string
- *           description: Comma separated search tags
- *         available_start_time:
- *           type: string
- *           format: time
- *           description: Available start time (HH:MM:SS)
- *         available_end_time:
- *           type: string
- *           format: time
- *           description: Available end time (HH:MM:SS)
- *         food_type:
- *           type: string
- *           enum: [veg, non_veg]
- *           description: Food type - 'veg' or 'non_veg'
- *           default: veg
- *         created_at:
- *           type: string
- *           format: date-time
- *         updated_at:
- *           type: string
- *           format: date-time
- *     CreateMenuItemRequest:
- *       type: object
- *       required:
- *         - restaurant_id
- *         - name
- *         - price
- *       properties:
- *         restaurant_id:
- *           type: string
- *           format: uuid
- *         category_id:
- *           type: string
- *           format: uuid
- *         name:
- *           type: string
- *           minLength: 1
- *           maxLength: 255
- *         description:
- *           type: string
- *         price:
- *           type: number
- *           format: decimal
- *           minimum: 0
- *         image_url:
- *           type: string
- *           maxLength: 500
- *         is_available:
- *           type: boolean
- *           default: true
- *         prep_time_minutes:
- *           type: integer
- *           minimum: 1
- *           description: Item preparation estimated time in minutes
- *         discount_type:
- *           type: string
- *           enum: [fixed, percentage]
- *           description: Discount type - 'fixed' or 'percentage'
- *         discount_value:
- *           type: number
- *           format: decimal
- *           minimum: 0
- *           description: Discount value (fixed amount or percentage)
- *         max_purchase_quantity:
- *           type: integer
- *           minimum: 1
- *           description: Maximum purchase quantity limit
- *         stock_type:
- *           type: string
- *           enum: [unlimited, limited, daily]
- *           description: Stock management type
- *           default: unlimited
- *         stock:
- *           type: integer
- *           minimum: 0
- *           description: Current stock quantity (null for unlimited)
- *         search_tags:
- *           type: string
- *           description: Comma separated search tags
- *         available_start_time:
- *           type: string
- *           format: time
- *           description: Available start time (HH:MM:SS)
- *         available_end_time:
- *           type: string
- *           format: time
- *           description: Available end time (HH:MM:SS)
- *         food_type:
- *           type: string
- *           enum: [veg, non_veg]
- *           description: Food type - 'veg' or 'non_veg'
- *           default: veg
- *     UpdateMenuItemRequest:
- *       type: object
- *       properties:
- *         category_id:
- *           type: string
- *           format: uuid
- *         name:
- *           type: string
- *           minLength: 1
- *           maxLength: 255
- *         description:
- *           type: string
- *         price:
- *           type: number
- *           format: decimal
- *           minimum: 0
- *         image_url:
- *           type: string
- *           maxLength: 500
- *         is_available:
- *           type: boolean
- *         prep_time_minutes:
- *           type: integer
- *           minimum: 1
- *         discount_type:
- *           type: string
- *           enum: [fixed, percentage]
- *         discount_value:
- *           type: number
- *           format: decimal
- *           minimum: 0
- *         max_purchase_quantity:
- *           type: integer
- *           minimum: 1
- *         stock_type:
- *           type: string
- *           enum: [unlimited, limited, daily]
- *         stock:
- *           type: integer
- *           minimum: 0
- *         search_tags:
- *           type: string
- *         available_start_time:
- *           type: string
- *           format: time
- *         available_end_time:
- *           type: string
- *           format: time
- *         food_type:
- *           type: string
- *           enum: [veg, non_veg]
- * tags:
- *   - name: Menu Items
- *     description: Menu item management endpoints
- */
-
-/**
- * @swagger
- * /menu-items:
- *   post:
- *     summary: Create menu item
- *     description: Creates a new menu item for a restaurant
- *     tags: [Menu Items]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/CreateMenuItemRequest'
- *     responses:
- *       201:
- *         description: Menu item created successfully
- *       400:
- *         description: Validation error
- *       404:
- *         description: Restaurant or category not found
- */
 router.post(
   '/',
   authenticate,
@@ -282,7 +59,7 @@ router.post(
   ],
   validateRequest,
   asyncHandler(async (req: RequestWithLogger, res: Response) => {
-    const { 
+    const {
       restaurant_id, category_id, name, description, price, image_url, is_available,
       prep_time_minutes, discount_type, discount_value, max_purchase_quantity,
       stock_type, stock, search_tags, available_start_time, available_end_time, food_type
@@ -375,45 +152,6 @@ router.post(
     );
   })
 );
-
-/**
- * @swagger
- * /menu-items:
- *   get:
- *     summary: List menu items
- *     description: Lists menu items for a restaurant with pagination
- *     tags: [Menu Items]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: restaurant_id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *       - in: query
- *         name: category_id
- *         schema:
- *           type: string
- *           format: uuid
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           minimum: 1
- *           default: 1
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 100
- *           default: 20
- *     responses:
- *       200:
- *         description: List of menu items
- */
 router.get(
   '/',
   authenticate,
@@ -471,29 +209,6 @@ router.get(
     });
   })
 );
-
-/**
- * @swagger
- * /menu-items/{id}:
- *   get:
- *     summary: Get menu item by ID
- *     description: Returns menu item details by ID
- *     tags: [Menu Items]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: Menu item details
- *       404:
- *         description: Menu item not found
- */
 router.get(
   '/:id',
   authenticate,
@@ -519,35 +234,6 @@ router.get(
     return sendSuccess(res, { menuItem: result.rows[0] });
   })
 );
-
-/**
- * @swagger
- * /menu-items/{id}:
- *   put:
- *     summary: Update menu item
- *     description: Updates menu item details
- *     tags: [Menu Items]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/UpdateMenuItemRequest'
- *     responses:
- *       200:
- *         description: Menu item updated successfully
- *       404:
- *         description: Menu item not found
- */
 router.put(
   '/:id',
   authenticate,
@@ -574,7 +260,7 @@ router.put(
   validateRequest,
   asyncHandler(async (req: RequestWithLogger, res: Response) => {
     const { id } = req.params;
-    const { 
+    const {
       category_id, name, description, price, image_url, is_available,
       prep_time_minutes, discount_type, discount_value, max_purchase_quantity,
       stock_type, stock, search_tags, available_start_time, available_end_time, food_type
@@ -616,7 +302,7 @@ router.put(
     // Validate discount settings: both type and value must be provided together
     const finalDiscountType = discount_type !== undefined ? discount_type : current.discount_type;
     const finalDiscountValue = discount_value !== undefined ? discount_value : current.discount_value;
-    
+
     if ((finalDiscountType && !finalDiscountValue) || (!finalDiscountType && finalDiscountValue)) {
       throw new ValidationError('Validation failed', [
         createFieldError('discount_type', 'Both discount_type and discount_value must be provided together, or both must be cleared'),
@@ -627,7 +313,7 @@ router.put(
     // Validate available time range: start_time must be before end_time
     const finalStartTime = available_start_time !== undefined ? available_start_time : current.available_start_time;
     const finalEndTime = available_end_time !== undefined ? available_end_time : current.available_end_time;
-    
+
     if (finalStartTime && finalEndTime) {
       const startTime = new Date(`2000-01-01T${finalStartTime}`);
       const endTime = new Date(`2000-01-01T${finalEndTime}`);
@@ -689,12 +375,12 @@ router.put(
       }
       // If only one is provided (and not null), validation above will catch it
     }
-    
+
     if (max_purchase_quantity !== undefined) {
       updates.push(`max_purchase_quantity = $${paramIndex++}`);
       values.push(max_purchase_quantity);
     }
-    
+
     // Handle stock settings: if stock_type is unlimited, stock must be null
     const finalStockType = stock_type !== undefined ? stock_type : current.stock_type;
     if (stock_type !== undefined) {
@@ -759,29 +445,6 @@ router.put(
     return sendSuccess(res, { menuItem }, 'Menu item updated successfully');
   })
 );
-
-/**
- * @swagger
- * /menu-items/{id}:
- *   delete:
- *     summary: Delete menu item
- *     description: Deletes a menu item
- *     tags: [Menu Items]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: Menu item deleted successfully
- *       404:
- *         description: Menu item not found
- */
 router.delete(
   '/:id',
   authenticate,

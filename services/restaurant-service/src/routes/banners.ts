@@ -66,123 +66,7 @@ async function validateBannerOwnership(
   }
 }
 
-/**
- * @swagger
- * components:
- *   schemas:
- *     Banner:
- *       type: object
- *       properties:
- *         id:
- *           type: string
- *           format: uuid
- *         restaurant_id:
- *           type: string
- *           format: uuid
- *         banner_name:
- *           type: string
- *         banner_image_url:
- *           type: string
- *         description:
- *           type: string
- *           nullable: true
- *         quote_amount:
- *           type: number
- *           format: decimal
- *           nullable: true
- *         quote_currency:
- *           type: string
- *           default: USD
- *         status:
- *           type: string
- *           enum: [requested, quoted, approved, rejected, cancelled]
- *         requested_by_user_id:
- *           type: string
- *           format: uuid
- *         approved_by_user_id:
- *           type: string
- *           format: uuid
- *           nullable: true
- *         requested_at:
- *           type: string
- *           format: date-time
- *         approved_at:
- *           type: string
- *           format: date-time
- *           nullable: true
- *         valid_from:
- *           type: string
- *           format: date-time
- *           nullable: true
- *         valid_to:
- *           type: string
- *           format: date-time
- *           nullable: true
- *         created_at:
- *           type: string
- *           format: date-time
- *         updated_at:
- *           type: string
- *           format: date-time
- * tags:
- *   - name: Banners
- *     description: Banner management endpoints
- */
-
 // ==================== RESTAURANT ADMIN ENDPOINTS ====================
-
-/**
- * @swagger
- * /banners:
- *   post:
- *     summary: Create a banner request
- *     description: Restaurant owner creates a banner request for their restaurant. Can upload an image file or provide an image URL.
- *     tags: [Banners]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         multipart/form-data:
- *           schema:
- *             type: object
- *             required:
- *               - restaurant_id
- *               - banner_name
- *             properties:
- *               restaurant_id:
- *                 type: string
- *                 format: uuid
- *               banner_name:
- *                 type: string
- *                 minLength: 1
- *                 maxLength: 255
- *               banner_image:
- *                 type: string
- *                 format: binary
- *                 description: Image file to upload (optional if banner_image_url is provided)
- *               banner_image_url:
- *                 type: string
- *                 format: uri
- *                 description: Image URL (optional if banner_image is uploaded)
- *               description:
- *                 type: string
- *               valid_from:
- *                 type: string
- *                 format: date-time
- *               valid_to:
- *                 type: string
- *                 format: date-time
- *     responses:
- *       201:
- *         description: Banner request created successfully
- *       400:
- *         description: Validation error
- *       403:
- *         description: Forbidden - Not restaurant owner
- *       404:
- *         description: Restaurant not found
- */
 router.post(
   "/banners",
   authenticate,
@@ -236,7 +120,7 @@ router.post(
     // Validate that either file or URL is provided
     const urlValue = banner_image_url?.trim();
     const hasValidUrl = urlValue && urlValue !== "" && urlValue !== "string";
-    
+
     if (!file && !hasValidUrl) {
       throw new ValidationError("Validation failed", [
         createFieldError("banner_image", "Either banner_image (file) or banner_image_url must be provided"),
@@ -288,46 +172,6 @@ router.post(
     return sendSuccess(res, { banner }, "Created", HTTP_STATUS.CREATED);
   })
 );
-
-/**
- * @swagger
- * /banners:
- *   get:
- *     summary: List banner requests for authenticated restaurant owner
- *     description: Returns all banner requests for restaurants owned by the authenticated user
- *     tags: [Banners]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: restaurant_id
- *         schema:
- *           type: string
- *           format: uuid
- *         description: Filter by restaurant ID (optional)
- *       - in: query
- *         name: status
- *         schema:
- *           type: string
- *           enum: [requested, quoted, approved, rejected, cancelled]
- *         description: Filter by status (optional)
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           minimum: 1
- *           default: 1
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 100
- *           default: 20
- *     responses:
- *       200:
- *         description: List of banner requests
- */
 router.get(
   "/banners",
   authenticate,
@@ -420,31 +264,6 @@ router.get(
     });
   })
 );
-
-/**
- * @swagger
- * /banners/{id}:
- *   get:
- *     summary: Get banner details
- *     description: Get details of a specific banner request (restaurant owner can only see their own)
- *     tags: [Banners]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: Banner details
- *       403:
- *         description: Forbidden - Not banner owner
- *       404:
- *         description: Banner not found
- */
 router.get(
   "/banners/:id",
   authenticate,
@@ -473,33 +292,6 @@ router.get(
     return sendSuccess(res, { banner: result.rows[0] });
   })
 );
-
-/**
- * @swagger
- * /banners/{id}/accept:
- *   post:
- *     summary: Accept banner quote
- *     description: Restaurant owner accepts the quote provided by admin. Banner status changes to 'approved'
- *     tags: [Banners]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: Quote accepted, banner approved
- *       400:
- *         description: Banner is not in 'quoted' status or quote not set
- *       403:
- *         description: Forbidden - Not banner owner
- *       404:
- *         description: Banner not found
- */
 router.post(
   "/banners/:id/accept",
   authenticate,
@@ -555,33 +347,6 @@ router.post(
     return sendSuccess(res, { banner: updateResult.rows[0] });
   })
 );
-
-/**
- * @swagger
- * /banners/{id}/reject:
- *   post:
- *     summary: Reject banner quote
- *     description: Restaurant owner rejects the quote provided by admin. Banner status changes to 'rejected'
- *     tags: [Banners]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: Quote rejected
- *       400:
- *         description: Banner is not in 'quoted' status
- *       403:
- *         description: Forbidden - Not banner owner
- *       404:
- *         description: Banner not found
- */
 router.post(
   "/banners/:id/reject",
   authenticate,
@@ -630,32 +395,6 @@ router.post(
 );
 
 // ==================== PUBLIC ENDPOINTS ====================
-
-/**
- * @swagger
- * /public/banners:
- *   get:
- *     summary: Get approved and public banners (Public)
- *     description: Returns all approved banners that are marked as public by admin and are currently valid. Banners are shown regardless of restaurant status. No authentication required.
- *     tags: [Banners]
- *     parameters:
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           minimum: 1
- *           default: 1
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 100
- *           default: 20
- *     responses:
- *       200:
- *         description: List of approved banners
- */
 router.get(
   "/public/banners",
   [

@@ -19,8 +19,6 @@
     "pino": "^8.17.2",
     "pino-pretty": "^10.3.1",
     "express-validator": "^7.0.1",
-    "swagger-jsdoc": "^6.2.8",
-    "swagger-ui-express": "^5.0.0",
     "tsconfig-paths": "^4.2.0"
   },
   "devDependencies": {
@@ -28,8 +26,6 @@
     "@types/cors": "^2.8.17",
     "@types/node": "^20.10.6",
     "@types/pg": "^8.10.9",
-    "@types/swagger-jsdoc": "^6.0.4",
-    "@types/swagger-ui-express": "^4.1.6",
     "typescript": "^5.3.3",
     "tsx": "^4.7.0"
   }

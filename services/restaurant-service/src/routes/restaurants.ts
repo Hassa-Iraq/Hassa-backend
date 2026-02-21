@@ -53,165 +53,6 @@ function mapRestaurantResponse(
   };
 }
 
-/**
- * @swagger
- * components:
- *   schemas:
- *     Restaurant:
- *       type: object
- *       properties:
- *         id:
- *           type: string
- *           format: uuid
- *         name:
- *           type: string
- *         description:
- *           type: string
- *         address:
- *           type: string
- *         phone:
- *           type: string
- *         contact_email:
- *           type: string
- *           format: email
- *           description: Restaurant business contact email
- *         is_active:
- *           type: boolean
- *           description: Restaurant approval status (true = approved by admin, false = pending)
- *         is_blocked:
- *           type: boolean
- *           description: Restaurant block status (true = blocked by admin)
- *         is_open:
- *           type: boolean
- *           description: Restaurant open/closed status (controlled by restaurant owner)
- *         created_at:
- *           type: string
- *           format: date-time
- *         updated_at:
- *           type: string
- *           format: date-time
- *     CreateRestaurantRequest:
- *       type: object
- *       required:
- *         - name
- *       properties:
- *         name:
- *           type: string
- *           minLength: 1
- *           maxLength: 255
- *         description:
- *           type: string
- *         address:
- *           type: string
- *         phone:
- *           type: string
- *           maxLength: 50
- *         contact_email:
- *           type: string
- *           format: email
- *           description: Restaurant business contact email (optional, different from user login email)
- *           example: info@restaurant.com
- *         tax_type:
- *           type: string
- *           enum: [inclusive, exclusive]
- *           description: Tax system type - 'inclusive' (tax deducted from restaurant earning) or 'exclusive' (tax added to customer, applied after discounts/coupons)
- *           default: exclusive
- *         tax_rate:
- *           type: number
- *           format: decimal
- *           minimum: 0
- *           maximum: 100
- *           description: Tax rate percentage (0-100)
- *           default: 0.00
- *         free_delivery_enabled:
- *           type: boolean
- *           description: Enable/disable free delivery
- *           default: false
- *         free_delivery_max_amount:
- *           type: number
- *           format: decimal
- *           minimum: 0
- *           nullable: true
- *           description: Maximum order amount for free delivery (null = no limit)
- *         free_delivery_min_distance_km:
- *           type: number
- *           format: decimal
- *           minimum: 0
- *           nullable: true
- *           description: Minimum distance in kilometers for free delivery (null = no minimum)
- *     UpdateRestaurantRequest:
- *       type: object
- *       properties:
- *         name:
- *           type: string
- *           minLength: 1
- *           maxLength: 255
- *         description:
- *           type: string
- *         address:
- *           type: string
- *         phone:
- *           type: string
- *           maxLength: 50
- *         contact_email:
- *           type: string
- *           format: email
- *           description: Restaurant business contact email (optional, different from user login email)
- *         tax_type:
- *           type: string
- *           enum: [inclusive, exclusive]
- *           description: Tax system type - 'inclusive' (tax deducted from restaurant earning) or 'exclusive' (tax added to customer, applied after discounts/coupons)
- *         tax_rate:
- *           type: number
- *           format: decimal
- *           minimum: 0
- *           maximum: 100
- *           description: Tax rate percentage (0-100)
- *         free_delivery_enabled:
- *           type: boolean
- *           description: Enable/disable free delivery
- *         free_delivery_max_amount:
- *           type: number
- *           format: decimal
- *           minimum: 0
- *           nullable: true
- *           description: Maximum order amount for free delivery (null = no limit)
- *         free_delivery_min_distance_km:
- *           type: number
- *           format: decimal
- *           minimum: 0
- *           nullable: true
- *           description: Minimum distance in kilometers for free delivery (null = no minimum)
- * tags:
- *   - name: Restaurants
- *     description: Restaurant management endpoints
- */
-
-/**
- * @swagger
- * /restaurants:
- *   post:
- *     summary: Create restaurant
- *     description: Creates a new restaurant profile. Only users with restaurant role can create restaurants.
- *     tags: [Restaurants]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/CreateRestaurantRequest'
- *     responses:
- *       201:
- *         description: Restaurant created successfully
- *       400:
- *         description: Validation error
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Forbidden - Only restaurant role allowed
- */
 router.post(
   "/",
   authenticate,
@@ -317,54 +158,6 @@ router.post(
     );
   })
 );
-
-/**
- * @swagger
- * /restaurants:
- *   get:
- *     summary: List all restaurants owned by the authenticated user
- *     description: Returns a paginated list of all restaurants owned by the authenticated user
- *     tags: [Restaurants]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           minimum: 1
- *           default: 1
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 100
- *           default: 20
- *     responses:
- *       200:
- *         description: List of restaurants owned by the user
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 restaurants:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/Restaurant'
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     page:
- *                       type: integer
- *                     limit:
- *                       type: integer
- *                     total:
- *                       type: integer
- *                     totalPages:
- *                       type: integer
- */
 router.get(
   "/",
   authenticate,
@@ -426,29 +219,6 @@ router.get(
     return sendSuccess(res, response);
   })
 );
-
-/**
- * @swagger
- * /restaurants/{id}:
- *   get:
- *     summary: Get restaurant by ID
- *     description: Returns restaurant details by ID
- *     tags: [Restaurants]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: Restaurant details
- *       404:
- *         description: Restaurant not found
- */
 router.get(
   "/:id",
   authenticate,
@@ -473,35 +243,6 @@ router.get(
     return sendSuccess(res, { restaurant });
   })
 );
-
-/**
- * @swagger
- * /restaurants/{id}:
- *   put:
- *     summary: Update restaurant
- *     description: Updates restaurant details. Only restaurant owners can update their restaurant.
- *     tags: [Restaurants]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/UpdateRestaurantRequest'
- *     responses:
- *       200:
- *         description: Restaurant updated successfully
- *       404:
- *         description: Restaurant not found
- */
 router.put(
   "/:id",
   authenticate,
@@ -576,8 +317,8 @@ router.put(
     }
 
     // Determine final free_delivery_enabled value
-    const finalFreeDeliveryEnabled = free_delivery_enabled !== undefined 
-      ? free_delivery_enabled 
+    const finalFreeDeliveryEnabled = free_delivery_enabled !== undefined
+      ? free_delivery_enabled
       : currentFreeDeliveryEnabled;
 
     // Build update query dynamically
@@ -617,7 +358,7 @@ router.put(
       updates.push(`free_delivery_enabled = $${paramIndex++}`);
       values.push(free_delivery_enabled);
     }
-    
+
     // Handle free delivery settings: clear amount/distance if disabled
     if (free_delivery_max_amount !== undefined) {
       if (finalFreeDeliveryEnabled) {
@@ -632,7 +373,7 @@ router.put(
       updates.push(`free_delivery_max_amount = $${paramIndex++}`);
       values.push(null);
     }
-    
+
     if (free_delivery_min_distance_km !== undefined) {
       if (finalFreeDeliveryEnabled) {
         updates.push(`free_delivery_min_distance_km = $${paramIndex++}`);
@@ -678,31 +419,6 @@ router.put(
     return sendSuccess(res, { restaurant }, "Restaurant updated successfully");
   })
 );
-
-/**
- * @swagger
- * /restaurants/{id}/approve:
- *   patch:
- *     summary: Approve restaurant (Admin only)
- *     description: Approves a restaurant for use. Only admins can approve restaurants.
- *     tags: [Restaurants]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: Restaurant approved successfully
- *       404:
- *         description: Restaurant not found
- *       403:
- *         description: Forbidden - Only admin role allowed
- */
 router.patch(
   "/:id/approve",
   authenticate,
@@ -755,31 +471,6 @@ router.patch(
     );
   })
 );
-
-/**
- * @swagger
- * /restaurants/{id}/block:
- *   patch:
- *     summary: Block restaurant (Admin only)
- *     description: Blocks a restaurant from being used. Only admins can block restaurants.
- *     tags: [Restaurants]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: Restaurant blocked successfully
- *       404:
- *         description: Restaurant not found
- *       403:
- *         description: Forbidden - Only admin role allowed
- */
 router.patch(
   "/:id/block",
   authenticate,
@@ -828,31 +519,6 @@ router.patch(
     );
   })
 );
-
-/**
- * @swagger
- * /restaurants/{id}/unblock:
- *   patch:
- *     summary: Unblock restaurant (Admin only)
- *     description: Unblocks a restaurant. Only admins can unblock restaurants. Note that unblocking does not automatically approve the restaurant.
- *     tags: [Restaurants]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: Restaurant unblocked successfully
- *       404:
- *         description: Restaurant not found
- *       403:
- *         description: Forbidden - Only admin role allowed
- */
 router.patch(
   "/:id/unblock",
   authenticate,
@@ -901,29 +567,6 @@ router.patch(
     );
   })
 );
-
-/**
- * @swagger
- * /restaurants/{id}/open:
- *   patch:
- *     summary: Open restaurant
- *     description: Opens a restaurant (sets is_open to true). Only restaurant owners can open their restaurant.
- *     tags: [Restaurants]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: Restaurant opened successfully
- *       404:
- *         description: Restaurant not found
- */
 router.patch(
   "/:id/open",
   authenticate,
@@ -983,29 +626,6 @@ router.patch(
     return sendSuccess(res, { restaurant }, "Restaurant opened successfully");
   })
 );
-
-/**
- * @swagger
- * /restaurants/{id}/close:
- *   patch:
- *     summary: Close restaurant
- *     description: Closes a restaurant (sets is_open to false). Only restaurant owners can close their restaurant.
- *     tags: [Restaurants]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: Restaurant closed successfully
- *       404:
- *         description: Restaurant not found
- */
 router.patch(
   "/:id/close",
   authenticate,

@@ -86,7 +86,6 @@ interface ResetPasswordPhoneBody {
   newPassword: string;
 }
 
-
 interface SignupOtpRequestBody {
   user_id: string;
   phone: string;
@@ -170,197 +169,6 @@ function toUserResponse(
   };
 }
 
-/**
- * @swagger
- * components:
- *   schemas:
- *     RegisterRequest:
- *       type: object
- *       required:
- *         - email
- *         - password
- *         - phone
- *         - accept_terms
- *       properties:
- *         email:
- *           type: string
- *           format: email
- *           example: user@example.com
- *         phone:
- *           type: string
- *           description: Phone number (will be normalized to E.164 format)
- *           example: "1234567890"
- *         country_code:
- *           type: string
- *           description: Country code (e.g., "+1" or "1"). Optional if phone already includes country code.
- *           example: "+1"
- *         password:
- *           type: string
- *           format: password
- *           minLength: 8
- *           example: SecurePass123!
- *         accept_terms:
- *           type: boolean
- *           description: Must be true to accept Terms & Conditions
- *           example: true
- *         role:
- *           type: string
- *           enum: [customer, restaurant, driver]
- *           default: customer
- *           example: customer
- *     RegisterResponse:
- *       type: object
- *       properties:
- *         success:
- *           type: boolean
- *           example: true
- *         message:
- *           type: string
- *           example: Verification code sent to your phone
- *         data:
- *           type: object
- *           properties:
- *             user:
- *               type: object
- *               properties:
- *                 id:
- *                   type: string
- *                   format: uuid
- *                   example: 123e4567-e89b-12d3-a456-426614174000
- *                 email:
- *                   type: string
- *                   format: email
- *                   example: user@example.com
- *                 phone:
- *                   type: string
- *                   example: "+11234567890"
- *                 role:
- *                   type: string
- *                   example: customer
- *             requires_verification:
- *               type: boolean
- *               example: true
- *             verification_method:
- *               type: string
- *               example: "phone_otp"
- *     LoginRequest:
- *       type: object
- *       required:
- *         - email
- *         - password
- *       properties:
- *         email:
- *           type: string
- *           format: email
- *           example: user@example.com
- *         password:
- *           type: string
- *           format: password
- *           example: SecurePass123!
- *     LoginResponse:
- *       type: object
- *       properties:
- *         success:
- *           type: boolean
- *           example: true
- *         message:
- *           type: string
- *           example: Login successful
- *         data:
- *           type: object
- *           properties:
- *             token:
- *               type: string
- *               example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
- *             user:
- *               type: object
- *               properties:
- *                 id:
- *                   type: string
- *                   format: uuid
- *                 email:
- *                   type: string
- *                   format: email
- *                 phone:
- *                   type: string
- *                   example: "+11234567890"
- *                 phone_verified:
- *                   type: boolean
- *                   example: true
- *                 email_verified:
- *                   type: boolean
- *                   example: true
- *                 role:
- *                   type: string
- *     ValidateTokenRequest:
- *       type: object
- *       required:
- *         - token
- *       properties:
- *         token:
- *           type: string
- *           example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
- *     ValidateTokenResponse:
- *       type: object
- *       properties:
- *         success:
- *           type: boolean
- *           example: true
- *         data:
- *           type: object
- *           properties:
- *             valid:
- *               type: boolean
- *               example: true
- *             user:
- *               type: object
- *               properties:
- *                 id:
- *                   type: string
- *                   format: uuid
- *                 email:
- *                   type: string
- *                   format: email
- *                 role:
- *                   type: string
- * tags:
- *   - name: Authentication
- *     description: User authentication and authorization endpoints
- */
-
-/**
- * @swagger
- * /auth/register:
- *   post:
- *     summary: Register a new user
- *     description: Creates a new user account with email, password, and optional role
- *     tags: [Authentication]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/RegisterRequest'
- *     responses:
- *       201:
- *         description: User registered successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/RegisterResponse'
- *       400:
- *         description: Validation error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ValidationError'
- *       409:
- *         description: User already exists
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- */
 router.post(
   "/register",
   [
@@ -513,40 +321,6 @@ router.post(
     );
   })
 );
-
-/**
- * @swagger
- * /auth/login:
- *   post:
- *     summary: Login user
- *     description: Authenticates a user and returns a JWT token
- *     tags: [Authentication]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/LoginRequest'
- *     responses:
- *       200:
- *         description: Login successful
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/LoginResponse'
- *       400:
- *         description: Validation error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ValidationError'
- *       401:
- *         description: Invalid credentials
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- */
 router.post(
   "/login",
   [
@@ -619,41 +393,6 @@ router.post(
     );
   })
 );
-
-/**
- * @swagger
- * /auth/login/phone:
- *   post:
- *     summary: Login user with phone
- *     description: Authenticates a user using phone and password and returns a JWT token
- *     tags: [Authentication]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - phone
- *               - password
- *             properties:
- *               phone:
- *                 type: string
- *                 description: Phone number in E.164 format
- *                 example: "+11234567890"
- *               password:
- *                 type: string
- *                 format: password
- *                 description: User password
- *                 example: "SecurePass123!"
- *     responses:
- *       200:
- *         description: Login successful
- *       400:
- *         description: Validation error
- *       401:
- *         description: Invalid credentials
- */
 router.post(
   "/login/phone",
   [
@@ -728,40 +467,6 @@ router.post(
     );
   })
 );
-
-/**
- * @swagger
- * /auth/validate:
- *   post:
- *     summary: Validate JWT token
- *     description: Validates a JWT token and returns user information. Used by other services for token validation. Accepts token in request body or Authorization header.
- *     tags: [Authentication]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: false
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               token:
- *                 type: string
- *                 example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
- *     responses:
- *       200:
- *         description: Token validation result
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ValidateTokenResponse'
- *       400:
- *         description: Validation error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ValidationError'
- */
 router.post(
   "/validate",
   asyncHandler(async (req: RequestWithLogger, res: Response) => {
@@ -812,45 +517,6 @@ router.post(
     }
   })
 );
-
-/**
- * @swagger
- * /auth/me:
- *   get:
- *     summary: Get current user
- *     description: Returns the currently authenticated user's information
- *     tags: [Authentication]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: User information retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 data:
- *                   type: object
- *                   properties:
- *                     user:
- *                       type: object
- *                       properties:
- *                         id:
- *                           type: string
- *                           format: uuid
- *                         email:
- *                           type: string
- *                           format: email
- *                         role:
- *                           type: string
- *       401:
- *         description: Unauthorized
- */
 router.get(
   "/me",
   authenticate,
@@ -876,36 +542,6 @@ router.get(
     });
   })
 );
-
-/**
- * @swagger
- * /auth/logout:
- *   post:
- *     summary: Logout
- *     description: Logs out the current user. Client should discard the JWT token after calling this endpoint. With stateless JWT, the token remains valid until expiry; this endpoint confirms logout intent and allows the client to clear the token.
- *     tags: [Authentication]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Logout successful. Client should discard the token.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: Logout successful
- *                 data:
- *                   type: object
- *                   nullable: true
- *       401:
- *         description: Unauthorized (invalid or missing token)
- */
 router.post(
   "/logout",
   authenticate,
@@ -915,41 +551,6 @@ router.post(
     return sendSuccess(res, null, "Logout successful");
   })
 );
-
-/**
- * @swagger
- * /auth/change-password:
- *   put:
- *     summary: Change password
- *     description: Allows authenticated users to change their password
- *     tags: [Authentication]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - currentPassword
- *               - newPassword
- *             properties:
- *               currentPassword:
- *                 type: string
- *                 format: password
- *               newPassword:
- *                 type: string
- *                 format: password
- *                 minLength: 8
- *     responses:
- *       200:
- *         description: Password changed successfully
- *       400:
- *         description: Validation error
- *       401:
- *         description: Unauthorized or invalid current password
- */
 router.put(
   "/change-password",
   authenticate,
@@ -1009,47 +610,6 @@ router.put(
     return sendSuccess(res, {}, "Password changed successfully");
   })
 );
-
-/**
- * @swagger
- * /auth/forgot-password:
- *   post:
- *     summary: Request password reset
- *     description: Generates a password reset token and sends it via email to the user. The token is valid for 1 hour.
- *     tags: [Authentication]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *     responses:
- *       200:
- *         description: Password reset email sent (if account exists)
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 data:
- *                   type: object
- *                   properties:
- *                     message:
- *                       type: string
- *                       example: If an account with that email exists, a password reset link has been sent to your email address.
- *       400:
- *         description: Validation error
- */
 router.post(
   "/forgot-password",
   [
@@ -1188,36 +748,6 @@ For security reasons, please do not share this token with anyone.
     }, "Password reset email sent");
   })
 );
-
-/**
- * @swagger
- * /auth/reset-password:
- *   post:
- *     summary: Reset password with token
- *     description: Resets user password using a valid reset token from forgot-password
- *     tags: [Authentication]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - token
- *               - newPassword
- *             properties:
- *               token:
- *                 type: string
- *               newPassword:
- *                 type: string
- *                 format: password
- *                 minLength: 8
- *     responses:
- *       200:
- *         description: Password reset successfully
- *       400:
- *         description: Validation error or invalid/expired token
- */
 router.post(
   "/reset-password",
   [
@@ -1279,33 +809,6 @@ router.post(
     return sendSuccess(res, {}, "Password reset successfully");
   })
 );
-
-/**
- * @swagger
- * /auth/forgot-password-phone:
- *   post:
- *     summary: Request password reset via phone
- *     description: Generates a password reset OTP and sends it via SMS to the user's phone. The OTP is valid for 10 minutes.
- *     tags: [Authentication]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - phone
- *             properties:
- *               phone:
- *                 type: string
- *                 example: "+11234567890"
- *                 description: Phone number in E.164 format
- *     responses:
- *       200:
- *         description: Password reset OTP sent (if account exists)
- *       400:
- *         description: Validation error
- */
 router.post(
   "/forgot-password-phone",
   [
@@ -1394,43 +897,6 @@ router.post(
     }, "Password reset OTP SMS sent");
   })
 );
-
-/**
- * @swagger
- * /auth/reset-password-phone:
- *   post:
- *     summary: Reset password with phone OTP
- *     description: Resets user password using a valid OTP sent to the user's phone
- *     tags: [Authentication]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - phone
- *               - otp
- *               - newPassword
- *             properties:
- *               phone:
- *                 type: string
- *                 example: "+11234567890"
- *                 description: Phone number in E.164 format
- *               otp:
- *                 type: string
- *                 pattern: '^[0-9]{6}$'
- *                 example: '123456'
- *               newPassword:
- *                 type: string
- *                 format: password
- *                 minLength: 8
- *     responses:
- *       200:
- *         description: Password reset successfully
- *       400:
- *         description: Validation error or invalid/expired OTP
- */
 router.post(
   "/reset-password-phone",
   [
@@ -1518,61 +984,6 @@ router.post(
     return sendSuccess(res, {}, "Password reset successfully");
   })
 );
-
-/**
- * @swagger
- * /auth/signup/phone/request-otp:
- *   post:
- *     summary: Resend signup OTP
- *     description: Resends OTP to user's phone during signup process. Does not require authentication. Rate limited to 3 requests per 15 minutes per phone.
- *     tags: [Authentication]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - user_id
- *               - phone
- *             properties:
- *               user_id:
- *                 type: string
- *                 format: uuid
- *                 description: User ID from registration response
- *                 example: "123e4567-e89b-12d3-a456-426614174000"
- *               phone:
- *                 type: string
- *                 description: Phone number in E.164 format (must match registration)
- *                 example: "+11234567890"
- *     responses:
- *       200:
- *         description: OTP sent successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 data:
- *                   type: object
- *                   properties:
- *                     message:
- *                       type: string
- *                     otp:
- *                       type: string
- *                       description: OTP code (only in development mode)
- *                     note:
- *                       type: string
- *                       description: Development note (only in development mode)
- *       400:
- *         description: Validation error, rate limit exceeded, or phone already verified
- *       404:
- *         description: User not found
- */
 router.post(
   "/signup/phone/request-otp",
   [
@@ -1681,61 +1092,6 @@ router.post(
     );
   })
 );
-
-/**
- * @swagger
- * /auth/signup/phone/verify-otp:
- *   post:
- *     summary: Verify signup OTP and auto-login
- *     description: Verifies OTP sent during signup and automatically logs in the user. Returns JWT token.
- *     tags: [Authentication]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - user_id
- *               - phone
- *               - otp
- *             properties:
- *               user_id:
- *                 type: string
- *                 format: uuid
- *                 example: "123e4567-e89b-12d3-a456-426614174000"
- *               phone:
- *                 type: string
- *                 example: "+11234567890"
- *                 description: Phone number in E.164 format
- *               otp:
- *                 type: string
- *                 pattern: '^[0-9]{6}$'
- *                 example: '123456'
- *     responses:
- *       200:
- *         description: OTP verified successfully, user logged in
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 data:
- *                   type: object
- *                   properties:
- *                     token:
- *                       type: string
- *                     user:
- *                       type: object
- *       400:
- *         description: Validation error or invalid/expired OTP
- *       404:
- *         description: User not found
- */
 router.post(
   "/signup/phone/verify-otp",
   [
@@ -1827,62 +1183,6 @@ router.post(
     );
   })
 );
-
-/**
- * @swagger
- * /auth/signup/email/request-otp:
- *   post:
- *     summary: Resend signup email OTP
- *     description: Resends OTP to user's email during signup process. Does not require authentication. Rate limited to 3 requests per 15 minutes per email.
- *     tags: [Authentication]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - user_id
- *               - email
- *             properties:
- *               user_id:
- *                 type: string
- *                 format: uuid
- *                 description: User ID from registration response
- *                 example: "123e4567-e89b-12d3-a456-426614174000"
- *               email:
- *                 type: string
- *                 format: email
- *                 description: Email address (must match registration)
- *                 example: "user@example.com"
- *     responses:
- *       200:
- *         description: OTP sent successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 data:
- *                   type: object
- *                   properties:
- *                     message:
- *                       type: string
- *                     otp:
- *                       type: string
- *                       description: OTP code (only in development mode)
- *                     note:
- *                       type: string
- *                       description: Development note (only in development mode)
- *       400:
- *         description: Validation error, rate limit exceeded, or email already verified
- *       404:
- *         description: User not found
- */
 router.post(
   "/signup/email/request-otp",
   [
@@ -2033,61 +1333,6 @@ If you didn't create an account, please ignore this email.
     );
   })
 );
-
-/**
- * @swagger
- * /auth/signup/email/verify-otp:
- *   post:
- *     summary: Verify signup email OTP and auto-login
- *     description: Verifies email OTP sent during signup and automatically logs in the user. Returns JWT token.
- *     tags: [Authentication]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - user_id
- *               - email
- *               - otp
- *             properties:
- *               user_id:
- *                 type: string
- *                 format: uuid
- *                 example: "123e4567-e89b-12d3-a456-426614174000"
- *               email:
- *                 type: string
- *                 format: email
- *                 example: "user@example.com"
- *               otp:
- *                 type: string
- *                 pattern: '^[0-9]{6}$'
- *                 example: '123456'
- *     responses:
- *       200:
- *         description: Email OTP verified successfully, user logged in
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 data:
- *                   type: object
- *                   properties:
- *                     token:
- *                       type: string
- *                     user:
- *                       type: object
- *       400:
- *         description: Validation error or invalid/expired OTP
- *       404:
- *         description: User not found
- */
 router.post(
   "/signup/email/verify-otp",
   [
@@ -2180,47 +1425,6 @@ router.post(
     );
   })
 );
-
-/**
- * @swagger
- * /auth/forgot-password-otp:
- *   post:
- *     summary: Request password reset via OTP
- *     description: Generates a 6-digit OTP and sends it via email to the user. The OTP is valid for 10 minutes.
- *     tags: [Authentication]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *     responses:
- *       200:
- *         description: OTP sent successfully (if account exists)
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 data:
- *                   type: object
- *                   properties:
- *                     message:
- *                       type: string
- *                       example: If an account with that email exists, an OTP has been sent to your email address.
- *       400:
- *         description: Validation error
- */
 router.post(
   "/forgot-password-otp",
   [
@@ -2357,42 +1561,6 @@ For security reasons, please do not share this OTP with anyone.
     }, "Password reset OTP sent");
   })
 );
-
-/**
- * @swagger
- * /auth/reset-password-otp:
- *   post:
- *     summary: Reset password with OTP
- *     description: Resets user password using a valid OTP from forgot-password-otp
- *     tags: [Authentication]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *               - otp
- *               - newPassword
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *               otp:
- *                 type: string
- *                 pattern: '^[0-9]{6}$'
- *                 example: '123456'
- *               newPassword:
- *                 type: string
- *                 format: password
- *                 minLength: 8
- *     responses:
- *       200:
- *         description: Password reset successfully
- *       400:
- *         description: Validation error or invalid/expired OTP
- */
 router.post(
   "/reset-password-otp",
   [
@@ -2480,61 +1648,6 @@ router.post(
     return sendSuccess(res, {}, "Password reset successfully");
   })
 );
-
-/**
- * @swagger
- * /auth/profile:
- *   put:
- *     summary: Update user profile
- *     description: Update profile. All fields optional. Select "multipart/form-data" content type in Swagger UI to upload profile picture image in the same request as full_name, date_of_birth, bio. Profile picture is set only by uploading the image (no URL). Email and phone cannot be changed.
- *     tags: [Authentication]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: false
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               full_name:
- *                 type: string
- *                 maxLength: 255
- *                 description: Display name (optional)
- *               date_of_birth:
- *                 type: string
- *                 format: date
- *                 description: Date of birth (ISO 8601, e.g. 2004-01-02) (optional)
- *               bio:
- *                 type: string
- *                 description: Short bio (optional)
- *         multipart/form-data:
- *           schema:
- *             type: object
- *             properties:
- *               full_name:
- *                 type: string
- *                 description: Display name (optional)
- *               date_of_birth:
- *                 type: string
- *                 format: date
- *                 description: Date of birth (ISO 8601, e.g. 2004-01-02) (optional)
- *               bio:
- *                 type: string
- *                 description: Short bio (optional)
- *               profile_picture:
- *                 type: string
- *                 format: binary
- *                 description: Upload profile picture image directly (optional, max 2MB). Use multipart/form-data to send image in the same request as other fields.
- *           encoding:
- *             profile_picture:
- *               contentType: image/jpeg
- *     responses:
- *       200:
- *         description: Profile updated successfully (or current profile if no fields provided)
- *       400:
- *         description: Validation error or email/phone update attempted
- */
 router.put(
   "/profile",
   authenticate,
@@ -2636,85 +1749,6 @@ router.put(
     }, "Profile updated successfully");
   })
 );
-
-/**
- * @swagger
- * /auth/admin/create-admin:
- *   post:
- *     summary: Create admin user (Admin only)
- *     description: Creates a new admin user. Only existing admin users can create new admin users.
- *     tags: [Authentication]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *               - password
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *                 example: admin@example.com
- *               password:
- *                 type: string
- *                 format: password
- *                 minLength: 8
- *                 example: SecurePass123!
- *     responses:
- *       201:
- *         description: Admin user created successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 data:
- *                   type: object
- *                   properties:
- *                     user:
- *                       type: object
- *                       properties:
- *                         id:
- *                           type: string
- *                           format: uuid
- *                         email:
- *                           type: string
- *                         role:
- *                           type: string
- *       400:
- *         description: Validation error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ValidationError'
- *       401:
- *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       403:
- *         description: Forbidden - Admin role required
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       409:
- *         description: User already exists
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- */
 router.post(
   "/admin/create-admin",
   authenticate,

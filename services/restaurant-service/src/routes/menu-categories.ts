@@ -33,93 +33,6 @@ async function validateRestaurantOwnership(restaurantId: string, userId: string)
   }
 }
 
-/**
- * @swagger
- * components:
- *   schemas:
- *     MenuCategory:
- *       type: object
- *       properties:
- *         id:
- *           type: string
- *           format: uuid
- *         restaurant_id:
- *           type: string
- *           format: uuid
- *         name:
- *           type: string
- *         description:
- *           type: string
- *         display_order:
- *           type: integer
- *         is_active:
- *           type: boolean
- *         created_at:
- *           type: string
- *           format: date-time
- *         updated_at:
- *           type: string
- *           format: date-time
- *     CreateMenuCategoryRequest:
- *       type: object
- *       required:
- *         - restaurant_id
- *         - name
- *       properties:
- *         restaurant_id:
- *           type: string
- *           format: uuid
- *         name:
- *           type: string
- *           minLength: 1
- *           maxLength: 255
- *         description:
- *           type: string
- *         display_order:
- *           type: integer
- *           minimum: 0
- *     UpdateMenuCategoryRequest:
- *       type: object
- *       properties:
- *         name:
- *           type: string
- *           minLength: 1
- *           maxLength: 255
- *         description:
- *           type: string
- *         display_order:
- *           type: integer
- *           minimum: 0
- *         is_active:
- *           type: boolean
- * tags:
- *   - name: Menu Categories
- *     description: Menu category management endpoints
- */
-
-/**
- * @swagger
- * /menu-categories:
- *   post:
- *     summary: Create menu category
- *     description: Creates a new menu category for a restaurant
- *     tags: [Menu Categories]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/CreateMenuCategoryRequest'
- *     responses:
- *       201:
- *         description: Menu category created successfully
- *       400:
- *         description: Validation error
- *       404:
- *         description: Restaurant not found
- */
 router.post(
   '/',
   authenticate,
@@ -170,40 +83,6 @@ router.post(
     );
   })
 );
-
-/**
- * @swagger
- * /menu-categories:
- *   get:
- *     summary: List menu categories
- *     description: Lists menu categories for a restaurant with pagination
- *     tags: [Menu Categories]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: restaurant_id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           minimum: 1
- *           default: 1
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 100
- *           default: 20
- *     responses:
- *       200:
- *         description: List of menu categories
- */
 router.get(
   '/',
   authenticate,
@@ -250,29 +129,6 @@ router.get(
     });
   })
 );
-
-/**
- * @swagger
- * /menu-categories/{id}:
- *   get:
- *     summary: Get menu category by ID
- *     description: Returns menu category details by ID
- *     tags: [Menu Categories]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: Menu category details
- *       404:
- *         description: Menu category not found
- */
 router.get(
   '/:id',
   authenticate,
@@ -298,35 +154,6 @@ router.get(
     return sendSuccess(res, { category: categoryResult.rows[0] });
   })
 );
-
-/**
- * @swagger
- * /menu-categories/{id}:
- *   put:
- *     summary: Update menu category
- *     description: Updates menu category details
- *     tags: [Menu Categories]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/UpdateMenuCategoryRequest'
- *     responses:
- *       200:
- *         description: Menu category updated successfully
- *       404:
- *         description: Menu category not found
- */
 router.put(
   '/:id',
   authenticate,
@@ -403,29 +230,6 @@ router.put(
     return sendSuccess(res, { category }, 'Menu category updated successfully');
   })
 );
-
-/**
- * @swagger
- * /menu-categories/{id}:
- *   delete:
- *     summary: Delete menu category
- *     description: Deletes a menu category. Menu items in this category will have category_id set to NULL.
- *     tags: [Menu Categories]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: Menu category deleted successfully
- *       404:
- *         description: Menu category not found
- */
 router.delete(
   '/:id',
   authenticate,

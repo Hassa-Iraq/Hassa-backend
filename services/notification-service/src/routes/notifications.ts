@@ -55,72 +55,6 @@ interface SendSMSBody {
   text: string;
 }
 
-/**
- * @swagger
- * components:
- *   schemas:
- *     SendEmailRequest:
- *       type: object
- *       required:
- *         - to
- *         - subject
- *         - html
- *       properties:
- *         to:
- *           type: string
- *           format: email
- *           example: user@example.com
- *         subject:
- *           type: string
- *           example: Password Reset Request
- *         html:
- *           type: string
- *           example: <h1>Reset your password</h1><p>Click here to reset...</p>
- *         text:
- *           type: string
- *           example: Reset your password. Click here to reset...
- *     SendEmailResponse:
- *       type: object
- *       properties:
- *         success:
- *           type: boolean
- *         message:
- *           type: string
- *         data:
- *           type: object
- *           properties:
- *             messageId:
- *               type: string
- * tags:
- *   - name: Notifications
- *     description: Email and notification endpoints
- */
-
-/**
- * @swagger
- * /notifications/send-email:
- *   post:
- *     summary: Send email
- *     description: Sends an email to the specified recipient. Requires SMTP configuration in environment variables. Accessible at /api/notifications/send-email through gateway.
- *     tags: [Notifications]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/SendEmailRequest'
- *     responses:
- *       200:
- *         description: Email sent successfully
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/SendEmailResponse'
- *       400:
- *         description: Validation error
- *       500:
- *         description: Email sending failed
- */
 router.post(
   '/send-email',
   [
@@ -222,54 +156,6 @@ router.post(
     }
   })
 );
-
-/**
- * @swagger
- * /notifications/send-sms:
- *   post:
- *     summary: Send SMS
- *     description: Sends an SMS to the specified phone number. In development mode, logs to console. In production, requires SMS provider configuration (Twilio, AWS SNS, etc.).
- *     tags: [Notifications]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - to
- *               - text
- *             properties:
- *               to:
- *                 type: string
- *                 description: Phone number in E.164 format
- *                 example: "+1234567890"
- *               text:
- *                 type: string
- *                 description: SMS message text
- *                 example: "Your verification code is: 123456"
- *     responses:
- *       200:
- *         description: SMS sent successfully (or logged in development)
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 data:
- *                   type: object
- *                   properties:
- *                     messageId:
- *                       type: string
- *       400:
- *         description: Validation error
- *       500:
- *         description: SMS sending failed
- */
 router.post(
   '/send-sms',
   [

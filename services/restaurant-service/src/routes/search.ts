@@ -12,63 +12,6 @@ import { searchRestaurants, searchMenuItems } from '../utils/elasticsearch';
 
 const router = express.Router();
 
-/**
- * @swagger
- * components:
- *   schemas:
- *     SearchResult:
- *       type: object
- *       properties:
- *         items:
- *           type: array
- *           items:
- *             type: object
- *         total:
- *           type: integer
- *         page:
- *           type: integer
- *         limit:
- *           type: integer
- *         totalPages:
- *           type: integer
- * tags:
- *   - name: Search
- *     description: Search endpoints using Elasticsearch (no authentication required)
- */
-
-/**
- * @swagger
- * /search/restaurants:
- *   get:
- *     summary: Search restaurants
- *     description: Searches for active and open restaurants using Elasticsearch. No authentication required.
- *     tags: [Search]
- *     parameters:
- *       - in: query
- *         name: q
- *         required: true
- *         schema:
- *           type: string
- *         description: Search query
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           minimum: 1
- *           default: 1
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 100
- *           default: 20
- *     responses:
- *       200:
- *         description: Search results
- *       400:
- *         description: Validation error
- */
 router.get(
   '/restaurants',
   [
@@ -103,46 +46,6 @@ router.get(
     });
   })
 );
-
-/**
- * @swagger
- * /search/menu-items:
- *   get:
- *     summary: Search menu items
- *     description: Searches for available menu items using Elasticsearch. No authentication required.
- *     tags: [Search]
- *     parameters:
- *       - in: query
- *         name: q
- *         required: true
- *         schema:
- *           type: string
- *         description: Search query
- *       - in: query
- *         name: restaurant_id
- *         schema:
- *           type: string
- *           format: uuid
- *         description: Filter by restaurant ID (optional)
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           minimum: 1
- *           default: 1
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 100
- *           default: 20
- *     responses:
- *       200:
- *         description: Search results
- *       400:
- *         description: Validation error
- */
 router.get(
   '/menu-items',
   [

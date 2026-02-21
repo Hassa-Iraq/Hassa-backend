@@ -11,7 +11,6 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  # Quick validation jobs - run in parallel
   type-check:
     name: TypeScript Type Check
     runs-on: ubuntu-22.04
@@ -86,7 +85,6 @@ jobs:
       - name: Run security audit
         run: npm run audit
 
-  # Test job - can run in parallel with quick checks
   test:
     name: Run Tests
     runs-on: ubuntu-22.04
@@ -142,11 +140,10 @@ jobs:
       - name: Run tests
         run: npm run test
 
-  # Build Docker images - only wait for test, run in parallel with other checks
   build-docker-images:
     name: Build Docker Images
     runs-on: ubuntu-22.04
-    needs: [test] # Only wait for tests, other checks can run in parallel
+    needs: [test]
     strategy:
       matrix:
         service:

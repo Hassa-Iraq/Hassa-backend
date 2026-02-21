@@ -12,63 +12,6 @@ import { cache, cacheKeys } from '../utils/redis';
 
 const router = express.Router();
 
-/**
- * @swagger
- * components:
- *   schemas:
- *     PublicRestaurant:
- *       type: object
- *       properties:
- *         id:
- *           type: string
- *           format: uuid
- *         name:
- *           type: string
- *         description:
- *           type: string
- *         address:
- *           type: string
- *         phone:
- *           type: string
- *         contact_email:
- *           type: string
- *           format: email
- *           description: Restaurant business contact email
- *         is_open:
- *           type: boolean
- *         created_at:
- *           type: string
- *           format: date-time
- * tags:
- *   - name: Discovery
- *     description: Public restaurant discovery endpoints (no authentication required)
- */
-
-/**
- * @swagger
- * /discover/restaurants:
- *   get:
- *     summary: List active and open restaurants
- *     description: Returns a paginated list of active and open restaurants. No authentication required.
- *     tags: [Discovery]
- *     parameters:
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           minimum: 1
- *           default: 1
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 100
- *           default: 20
- *     responses:
- *       200:
- *         description: List of restaurants
- */
 router.get(
   '/restaurants',
   [
@@ -129,27 +72,6 @@ router.get(
     return sendSuccess(res, response);
   })
 );
-
-/**
- * @swagger
- * /discover/restaurants/{id}:
- *   get:
- *     summary: Get restaurant details
- *     description: Returns details of an active and open restaurant. No authentication required.
- *     tags: [Discovery]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: Restaurant details
- *       404:
- *         description: Restaurant not found or not available
- */
 router.get(
   '/restaurants/:id',
   [commonValidators.uuid('id')],
@@ -191,27 +113,6 @@ router.get(
     return sendSuccess(res, response);
   })
 );
-
-/**
- * @swagger
- * /discover/restaurants/{id}/menu:
- *   get:
- *     summary: Get restaurant menu
- *     description: Returns the menu (categories and items) of an active and open restaurant. No authentication required.
- *     tags: [Discovery]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: Restaurant menu
- *       404:
- *         description: Restaurant not found or not available
- */
 router.get(
   '/restaurants/:id/menu',
   [commonValidators.uuid('id')],
