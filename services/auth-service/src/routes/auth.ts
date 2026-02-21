@@ -591,8 +591,7 @@ router.post(
       ]);
     }
 
-    // Check if phone is verified (required for login)
-    if (!user.phone_verified) {
+    if (user.role_name !== "admin" && !user.phone_verified) {
       throw new UnauthorizedError("Authentication failed", {
         errors: [
           createFieldError("phone", "Phone number is not verified. Please verify your phone number to login."),
@@ -601,7 +600,6 @@ router.post(
       });
     }
 
-    // Generate token
     const token = generateToken({
       userId: user.id,
       email: user.email,
@@ -700,8 +698,8 @@ router.post(
       ]);
     }
 
-    // Check if phone is verified (only after password is validated)
-    if (!user.phone_verified) {
+    // Check if phone is verified (only after password is validated) — skip for admin role
+    if (user.role_name !== "admin" && !user.phone_verified) {
       throw new UnauthorizedError("Authentication failed", {
         errors: [
           createFieldError("phone", "Phone number is not verified. Please verify your phone number to login."),
@@ -2756,10 +2754,10 @@ router.post(
     // Hash password
     const passwordHash = await hashPassword(password);
 
-    // Create admin user
+    // Create admin user (phone_verified true so admin can login without phone verification)
     await pool.query(
-      `INSERT INTO auth.users (email, password_hash, role_id)
-       VALUES ($1, $2, $3)`,
+      `INSERT INTO auth.users (email, password_hash, role_id, phone_verified)
+       VALUES ($1, $2, $3, TRUE)`,
       [email, passwordHash, roleId]
     );
 

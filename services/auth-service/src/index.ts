@@ -4,7 +4,6 @@ import { createLogger } from 'shared/logger/index';
 import pool from './db/connection';
 import { hashPassword } from './utils/password';
 import { initializeFirstUser } from 'shared/admin-initializer/index';
-
 const logger = createLogger(config.SERVICE_NAME, config.LOG_LEVEL);
 
 /**
@@ -13,7 +12,7 @@ const logger = createLogger(config.SERVICE_NAME, config.LOG_LEVEL);
  */
 async function initializeAdmin() {
   try {
-    await initializeFirstUser({
+    const result = await initializeFirstUser({
       pool,
       roleName: 'admin',
       defaultEmail: process.env.FIRST_ADMIN_EMAIL || 'admin@foodapp.com',
@@ -21,6 +20,13 @@ async function initializeAdmin() {
       hashPassword,
       logger,
     });
+    if (result.created && result.user?.id) {
+      await pool.query(
+        'UPDATE auth.users SET phone_verified = TRUE WHERE id = $1',
+        [result.user.id]
+      );
+      logger.info({ userId: result.user.id }, 'First admin phone_verified set to true');
+    }
   } catch (error: any) {
     logger.error({ error: error.message }, 'Failed to initialize admin user');
   }

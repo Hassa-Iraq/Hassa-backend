@@ -124,8 +124,8 @@ async function createAdminUser() {
     const passwordHash = await hashPassword(password);
 
     const userResult = await pool.query(
-      `INSERT INTO auth.users (email, password_hash, role_id)
-       VALUES ($1, $2, $3)
+      `INSERT INTO auth.users (email, password_hash, role_id, phone_verified)
+       VALUES ($1, $2, $3, TRUE)
        RETURNING id, email, created_at`,
       [email, passwordHash, roleId]
     );
