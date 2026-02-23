@@ -24,7 +24,7 @@ export function authenticate(
     res.status(401).json({
       success: false,
       status: "ERROR",
-      message: "No token provided",
+      message: "Provide a valid token",
       data: null,
     });
     return;

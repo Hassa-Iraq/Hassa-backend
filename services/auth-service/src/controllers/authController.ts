@@ -367,7 +367,7 @@ export const me = async (req: AuthRequest, res: Response) => {
     return res.status(200).json({
       success: true,
       status: "OK",
-      message: "Profile retrieved",
+      message: "Profile retrieved successfully",
       data: { user: User.toUserResponse(user) },
     });
   } catch (err) {
