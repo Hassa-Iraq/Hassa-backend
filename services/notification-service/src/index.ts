@@ -1,21 +1,18 @@
-import app from './app';
-import config from './config/index';
-import { createLogger } from 'shared/logger/index';
-
-const logger = createLogger(config.SERVICE_NAME, config.LOG_LEVEL);
+import app from "./app";
+import config from "./config/index";
 
 const PORT = config.PORT || 3006;
 
 app.listen(PORT, () => {
-  logger.info({ port: PORT, env: config.NODE_ENV }, 'Notification service started');
+  if (process.env.NODE_ENV !== "test") {
+    console.log(`Notification service listening on port ${PORT}`);
+  }
 });
 
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, shutting down gracefully');
+process.on("SIGTERM", () => {
   process.exit(0);
 });
 
-process.on('SIGINT', () => {
-  logger.info('SIGINT received, shutting down gracefully');
+process.on("SIGINT", () => {
   process.exit(0);
 });

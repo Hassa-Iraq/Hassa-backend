@@ -4,7 +4,6 @@ const schema = {
   ...commonSchemas.server,
   ...commonSchemas.database,
   ...commonSchemas.redis,
-  AUTH_SERVICE_URL: { type: 'string' as const, default: 'http://auth-service:3001' },
   SMTP_HOST: { type: 'string' as const, default: '' },
   SMTP_PORT: { type: 'string' as const, default: '587' },
   SMTP_USER: { type: 'string' as const, default: '' },
