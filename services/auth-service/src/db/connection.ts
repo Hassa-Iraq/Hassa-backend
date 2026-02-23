@@ -6,8 +6,6 @@ import {
 import config from "../config/index";
 
 const pool = createDbPool(config as DbConfig, "auth");
-
-// Test connection on startup
 testConnection(pool).then((connected: boolean) => {
   if (connected) {
     console.log("Database connection established for auth service");

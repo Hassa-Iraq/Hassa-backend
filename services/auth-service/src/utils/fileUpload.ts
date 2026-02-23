@@ -2,21 +2,13 @@ import multer from "multer";
 import { Request } from "express";
 import { join } from "path";
 import { existsSync, mkdirSync } from "fs";
-import { createLogger } from "shared/logger/index";
-import config from "../config/index";
 
-const logger = createLogger(config.SERVICE_NAME, config.LOG_LEVEL);
-
-// Define upload directory for profile pictures
 export const UPLOAD_DIR = process.env.UPLOAD_DIR || join(process.cwd(), "uploads", "profile");
 
-// Ensure upload directory exists
 if (!existsSync(UPLOAD_DIR)) {
   mkdirSync(UPLOAD_DIR, { recursive: true });
-  logger.info({ uploadDir: UPLOAD_DIR }, "Created upload directory");
 }
 
-// Configure storage
 const storage = multer.diskStorage({
   destination: (_req: Request, _file: Express.Multer.File, cb) => {
     cb(null, UPLOAD_DIR);
@@ -29,7 +21,6 @@ const storage = multer.diskStorage({
   },
 });
 
-// File filter - only allow images
 const fileFilter = (
   _req: Request,
   file: Express.Multer.File,
@@ -46,7 +37,7 @@ export const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 2 * 1024 * 1024, // 2MB for profile pictures
+    fileSize: 2 * 1024 * 1024,
   },
 });
 

@@ -160,7 +160,6 @@ export function errorHandler(
   res: Response,
   _next: NextFunction
 ): Response | void {
-  // Log error with comprehensive details
   if (req.logger) {
     const errorInfo: {
       name: string;
@@ -174,7 +173,6 @@ export function errorHandler(
       stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
     };
 
-    // Add error code and details for AppError
     if (err instanceof AppError) {
       errorInfo.errorCode = err.errorCode;
       if (err.details) {
@@ -194,7 +192,6 @@ export function errorHandler(
       statusCode: err instanceof AppError ? err.statusCode : 500,
     };
 
-    // Add user info if available
     if (req.user) {
       errorDetails.user = {
         id: req.user.id,
@@ -205,7 +202,6 @@ export function errorHandler(
     req.logger.error(errorDetails, "Request error");
   }
 
-  // Handle known application errors
   if (err instanceof AppError) {
     return sendError(
       res,
@@ -216,7 +212,6 @@ export function errorHandler(
     );
   }
 
-  // Handle validation errors from express-validator
   if (err.name === "ValidationError" || err.name === "MulterError") {
     const validationErr = err as Error & { errors?: unknown; details?: unknown };
     return sendError(
@@ -228,7 +223,6 @@ export function errorHandler(
     );
   }
 
-  // Handle JWT errors
   if (err.name === "JsonWebTokenError") {
     return sendError(
       res,
@@ -249,10 +243,8 @@ export function errorHandler(
     );
   }
 
-  // Handle database errors
   const dbError = err as Error & { code?: string };
   if (dbError.code === "23505") {
-    // PostgreSQL unique violation
     return sendError(
       res,
       "Resource already exists",
@@ -262,7 +254,6 @@ export function errorHandler(
     );
   }
 
-  // Default error response
   const message =
     process.env.NODE_ENV === "production"
       ? "Internal server error"
