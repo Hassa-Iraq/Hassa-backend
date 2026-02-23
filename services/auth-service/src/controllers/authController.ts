@@ -481,7 +481,7 @@ export const signupRequestOtp = async (req: AuthRequest, res: Response) => {
     return res.status(200).json({
       success: true,
       status: "OK",
-      message: "Verification codes sent to your email and phone",
+      message: "Verification code sent to your email and phone",
       data: null,
     });
   } catch (err) {
