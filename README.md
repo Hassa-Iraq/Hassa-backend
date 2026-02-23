@@ -555,7 +555,7 @@ The database uses **schema-based isolation** - each service has its own PostgreS
 - **`npm run migrate:fresh`** – Drops old DBs (`food_delivery`, `hassa`), creates `hassa`, and applies the initial schema. Use when you want a clean DB (e.g. on server).
 - **`npm run migrate:legacy`** – Runs the older node-pg-migrate migrations from `database/migrations/` (e.g. `npm run migrate:down`, `npm run migrate:create add_user_table` for that set).
 
-See **database/migrations_initial/README.md** and **docs/APP_FLOWS.md** for details.
+See **docs/APP_FLOWS.md** for details.
 
 ## Shared Utilities
 

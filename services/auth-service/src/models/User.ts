@@ -135,22 +135,33 @@ export async function existsByPhone(phone: string): Promise<boolean> {
 
 export async function create(params: {
   email: string;
-  phone: string;
+  phone?: string | null;
   password_hash: string;
   role_id: string;
-  terms_accepted_at: Date;
-}): Promise<void> {
-  await pool.query(
-    `INSERT INTO auth.users (email, phone, password_hash, role_id, terms_accepted_at)
-     VALUES ($1, $2, $3, $4, $5)`,
+  email_verified?: boolean;
+  phone_verified?: boolean;
+}): Promise<UserRow> {
+  const emailVerified = params.email_verified ?? false;
+  const phoneVerified = params.phone_verified ?? false;
+  const result = await pool.query<UserRow>(
+    `INSERT INTO auth.users (email, phone, password_hash, role_id, email_verified, phone_verified)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, email, phone, password_hash, role_id, email_verified, phone_verified,
+       full_name, date_of_birth, bio, profile_picture_url, created_at, updated_at`,
     [
       params.email,
-      params.phone,
+      params.phone ?? null,
       params.password_hash,
       params.role_id,
-      params.terms_accepted_at,
+      emailVerified,
+      phoneVerified,
     ]
   );
+  const row = result.rows[0];
+  if (!row) {
+    throw new Error("User create returned no row");
+  }
+  return row;
 }
 
 export async function createAdmin(params: {

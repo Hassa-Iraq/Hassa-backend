@@ -57,7 +57,7 @@ function getDatabaseUrl(env) {
   }
 
   const port = env.POSTGRES_PORT || (host === "localhost" ? "5433" : "5432");
-  const database = env.POSTGRES_DB || "food_delivery";
+  const database = env.POSTGRES_DB || "hassa";
   const user = env.POSTGRES_USER || "postgres";
   const password = env.POSTGRES_PASSWORD || "postgres";
 

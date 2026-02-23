@@ -184,6 +184,94 @@ export async function findOTPByPhone(
   return { valid: true, userId, record: validation.record };
 }
 
+/** Signup OTP record (auth.signup_otps, no user_id) */
+export interface SignupOTPRecord {
+  id: string;
+  identifier: string;
+  purpose: string;
+  otp: string;
+  expires_at: Date;
+  used: boolean;
+  attempts: number;
+}
+
+/** Store OTP for pending signup (keyed by email or phone) */
+export async function storeSignupOTP(
+  pool: Pool,
+  identifier: string,
+  purpose: 'signup_email' | 'signup_phone',
+  expiresInMinutes: number = 10
+): Promise<string> {
+  const otp = generateOTPCode();
+  const expiresAt = new Date();
+  expiresAt.setMinutes(expiresAt.getMinutes() + expiresInMinutes);
+  await invalidatePreviousSignupOTPs(pool, identifier, purpose);
+  await pool.query(
+    `INSERT INTO auth.signup_otps (identifier, purpose, otp, expires_at, attempts)
+     VALUES ($1, $2, $3, $4, 0)`,
+    [identifier, purpose, otp, expiresAt]
+  );
+  return otp;
+}
+
+/** Validate signup OTP by identifier */
+export async function validateSignupOTP(
+  pool: Pool,
+  identifier: string,
+  purpose: 'signup_email' | 'signup_phone',
+  otp: string
+): Promise<{ valid: boolean; record?: SignupOTPRecord; error?: string }> {
+  const result = await pool.query<SignupOTPRecord>(
+    `SELECT id, identifier, purpose, otp, expires_at, used, attempts
+     FROM auth.signup_otps
+     WHERE identifier = $1 AND purpose = $2 AND used = FALSE
+     ORDER BY created_at DESC LIMIT 1`,
+    [identifier, purpose]
+  );
+  if (result.rows.length === 0) {
+    return { valid: false, error: 'No valid OTP found. Please request a new one.' };
+  }
+  const record = result.rows[0];
+  if (new Date() > new Date(record.expires_at)) {
+    return { valid: false, error: 'OTP has expired' };
+  }
+  if (record.attempts >= 5) {
+    await pool.query(`UPDATE auth.signup_otps SET used = TRUE WHERE id = $1`, [record.id]);
+    return { valid: false, error: 'Too many failed attempts. Please request a new OTP.' };
+  }
+  if (record.otp !== otp) {
+    await pool.query(
+      `UPDATE auth.signup_otps SET attempts = attempts + 1 WHERE id = $1`,
+      [record.id]
+    );
+    const updated = await pool.query<{ attempts: number }>(
+      `SELECT attempts FROM auth.signup_otps WHERE id = $1`,
+      [record.id]
+    );
+    if (updated.rows[0]?.attempts >= 5) {
+      await pool.query(`UPDATE auth.signup_otps SET used = TRUE WHERE id = $1`, [record.id]);
+      return { valid: false, error: 'Too many failed attempts. Please request a new OTP.' };
+    }
+    return { valid: false, error: 'Invalid OTP' };
+  }
+  return { valid: true, record };
+}
+
+export async function markSignupOTPUsed(pool: Pool, id: string): Promise<void> {
+  await pool.query(`UPDATE auth.signup_otps SET used = TRUE WHERE id = $1`, [id]);
+}
+
+export async function invalidatePreviousSignupOTPs(
+  pool: Pool,
+  identifier: string,
+  purpose: 'signup_email' | 'signup_phone'
+): Promise<void> {
+  await pool.query(
+    `UPDATE auth.signup_otps SET used = TRUE WHERE identifier = $1 AND purpose = $2 AND used = FALSE`,
+    [identifier, purpose]
+  );
+}
+
 export default {
   generateOTPCode,
   generateAndStoreOTP,
@@ -191,4 +279,8 @@ export default {
   markOTPAsUsed,
   invalidatePreviousOTPs,
   findOTPByPhone,
+  storeSignupOTP,
+  validateSignupOTP,
+  markSignupOTPUsed,
+  invalidatePreviousSignupOTPs,
 };
