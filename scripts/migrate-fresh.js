@@ -58,9 +58,17 @@ function getDbConfig(env, database = null) {
   return { host, port, database: db, user, password };
 }
 
+function safeDbName(name) {
+  if (!/^[a-zA-Z0-9_]+$/.test(name)) {
+    console.error("Invalid database name (use only letters, numbers, underscore):", name);
+    process.exit(1);
+  }
+  return name;
+}
+
 async function run() {
   const env = loadEnv();
-  const dbName = env.POSTGRES_DB || "hassa";
+  const dbName = safeDbName(env.POSTGRES_DB || "hassa");
 
   let sql;
   try {
@@ -84,10 +92,10 @@ async function run() {
 
     console.log("Dropping old databases (food_delivery and", dbName + ")...");
     await client.query("DROP DATABASE IF EXISTS food_delivery");
-    await client.query(`DROP DATABASE IF EXISTS "${dbName.replace(/"/g, '""')}"`);
+    await client.query('DROP DATABASE IF EXISTS "' + dbName.replace(/"/g, '""') + '"');
 
     console.log("Creating database", dbName + "...");
-    await client.query(`CREATE DATABASE "${dbName.replace(/"/g, '""')}"`);
+    await client.query('CREATE DATABASE "' + dbName.replace(/"/g, '""') + '"');
 
     await client.end();
   } catch (error) {

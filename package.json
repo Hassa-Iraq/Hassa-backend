@@ -13,7 +13,7 @@
     "stop:all": "docker compose down",
     "restart:all": "docker compose restart",
     "migrate": "node scripts/migrate-initial.js",
-    "migrate:fresh": "bash database/migrations_initial/run_fresh.sh",
+    "migrate:fresh": "node scripts/migrate-fresh.js",
     "migrate:legacy": "node scripts/migrate.js up",
     "migrate:up": "node scripts/migrate.js up",
     "migrate:down": "node scripts/migrate.js down",
