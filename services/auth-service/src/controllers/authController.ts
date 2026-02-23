@@ -468,6 +468,7 @@ export const signupRequestOtp = async (req: AuthRequest, res: Response) => {
         data: null,
       });
     }
+
     if (!smsResp.ok) {
       return res.status(502).json({
         success: false,
@@ -481,15 +482,13 @@ export const signupRequestOtp = async (req: AuthRequest, res: Response) => {
       success: true,
       status: "OK",
       message: "Verification codes sent to your email and phone",
-      data: {
-        message: "Enter the code from your email on the next step, then password and the code from your phone to complete registration.",
-      },
+      data: null,
     });
   } catch (err) {
     return res.status(500).json({
       success: false,
       status: "ERROR",
-      message: (err as Error).message || "Send OTP failed",
+      message: (err as Error).message || "Failed to send OTP",
       data: null,
     });
   }
@@ -545,7 +544,7 @@ export const signupEmailVerifyOtp = async (req: AuthRequest, res: Response) => {
       status: "OK",
       message: "Email verified. You can now complete registration.",
       data: {
-        next_step: "register",
+        next_step: "phone_verification",
         email: emailTrimmed,
       },
     });
@@ -553,7 +552,7 @@ export const signupEmailVerifyOtp = async (req: AuthRequest, res: Response) => {
     return res.status(500).json({
       success: false,
       status: "ERROR",
-      message: (err as Error).message || "Verify OTP failed",
+      message: (err as Error).message || "Failed to verify OTP",
       data: null,
     });
   }
