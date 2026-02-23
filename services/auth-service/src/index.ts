@@ -20,6 +20,7 @@ async function initializeAdmin() {
       );
     }
   } catch (_error) {
+    console.error("Failed to initialize admin");
   }
 }
 
