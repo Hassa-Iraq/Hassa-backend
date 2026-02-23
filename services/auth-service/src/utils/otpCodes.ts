@@ -18,14 +18,13 @@ export function generateOtpCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-/** Store OTP for email (invalidates previous unused for this email). Optional code: if provided, use it (e.g. dev OTP). */
+/** Store OTP for email (invalidates previous unused for this email) */
 export async function storeOtpForEmail(
   pool: Pool,
   email: string,
-  expiresInMinutes: number = 10,
-  code?: string
+  expiresInMinutes: number = 10
 ): Promise<string> {
-  const otpCode = code ?? generateOtpCode();
+  const code = generateOtpCode();
   const expiresAt = new Date();
   expiresAt.setMinutes(expiresAt.getMinutes() + expiresInMinutes);
   await pool.query(
@@ -34,19 +33,18 @@ export async function storeOtpForEmail(
   );
   await pool.query(
     `INSERT INTO auth.otp_codes (email, phone, code, expires_at, is_used, attempts) VALUES ($1, NULL, $2, $3, false, 0)`,
-    [email, otpCode, expiresAt]
+    [email, code, expiresAt]
   );
-  return otpCode;
+  return code;
 }
 
-/** Store OTP for phone (invalidates previous unused for this phone). Optional code: if provided, use it (e.g. dev OTP). */
+/** Store OTP for phone (invalidates previous unused for this phone) */
 export async function storeOtpForPhone(
   pool: Pool,
   phone: string,
-  expiresInMinutes: number = 10,
-  code?: string
+  expiresInMinutes: number = 10
 ): Promise<string> {
-  const otpCode = code ?? generateOtpCode();
+  const code = generateOtpCode();
   const expiresAt = new Date();
   expiresAt.setMinutes(expiresAt.getMinutes() + expiresInMinutes);
   await pool.query(
@@ -55,9 +53,9 @@ export async function storeOtpForPhone(
   );
   await pool.query(
     `INSERT INTO auth.otp_codes (email, phone, code, expires_at, is_used, attempts) VALUES (NULL, $1, $2, $3, false, 0)`,
-    [phone, otpCode, expiresAt]
+    [phone, code, expiresAt]
   );
-  return otpCode;
+  return code;
 }
 
 /** Validate OTP for email; returns record if valid so caller can mark used */

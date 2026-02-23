@@ -21,9 +21,8 @@ export function loadConfig(schema: ConfigSchema): Record<string, any> {
 
   for (const [key, definition] of Object.entries(schema)) {
     const envValue = process.env[key];
-    
+
     if (envValue !== undefined) {
-      // Type conversion based on definition
       if (definition.type === 'number') {
         config[key] = Number(envValue);
       } else if (definition.type === 'boolean') {
@@ -58,19 +57,19 @@ export const commonSchemas = {
     POSTGRES_USER: { type: 'string' as const, default: 'postgres' },
     POSTGRES_PASSWORD: { type: 'string' as const, required: true },
   },
-  
+
   redis: {
     REDIS_HOST: { type: 'string' as const, default: 'localhost' },
     REDIS_PORT: { type: 'number' as const, default: 6379 },
   },
-  
+
   server: {
     PORT: { type: 'number' as const, default: 3000 },
     NODE_ENV: { type: 'string' as const, default: 'development' },
     LOG_LEVEL: { type: 'string' as const, default: 'info' },
     SERVICE_NAME: { type: 'string' as const, required: true },
   },
-  
+
   jwt: {
     JWT_SECRET: { type: 'string' as const, required: true },
     JWT_EXPIRES_IN: { type: 'string' as const, default: '24h' },

@@ -21,12 +21,6 @@ import {
   wasEmailRecentlyVerified,
 } from "../utils/otpCodes";
 import config from "../config/index";
-import {
-  OTP_EXPIRY_MINUTES,
-  getOtpForStorage,
-  sendEmailOtp,
-  sendPhoneOtp,
-} from "../services/otpService";
 import { Pool } from "pg";
 import pool from "../db/connection";
 
@@ -439,39 +433,46 @@ export const signupRequestOtp = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const emailOtp = getOtpForStorage();
-    const phoneOtp = getOtpForStorage();
-
-    await Promise.all([
-      storeOtpForEmail(pool as Pool, emailTrimmed, OTP_EXPIRY_MINUTES, emailOtp),
-      storeOtpForPhone(pool as Pool, normalizedPhone, OTP_EXPIRY_MINUTES, phoneOtp),
+    const [emailOtp, phoneOtp] = await Promise.all([
+      storeOtpForEmail(pool as Pool, emailTrimmed, 10),
+      storeOtpForPhone(pool as Pool, normalizedPhone, 10),
     ]);
 
-    const notificationUrl = config.NOTIFICATION_SERVICE_URL || "http://notification-service:3006";
-    const [emailResult, phoneResult] = await Promise.all([
-      sendEmailOtp(emailTrimmed, emailOtp, {
-        notificationServiceUrl: notificationUrl,
-        expiresMinutes: OTP_EXPIRY_MINUTES,
+    const url = config.NOTIFICATION_SERVICE_URL || "http://notification-service:3006";
+    const emailHtml = `<!DOCTYPE html><html><body><h2>Email Verification</h2><p>Your code: <strong>${emailOtp}</strong></p><p>Expires in 10 minutes.</p></body></html>`;
+    const smsText = `Your Food App verification code is: ${phoneOtp}. Expires in 10 minutes.`;
+
+    const [emailResp, smsResp] = await Promise.all([
+      fetch(`${url}/send-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: emailTrimmed,
+          subject: "Food App - Email Verification Code",
+          html: emailHtml,
+          text: `Your verification code is: ${emailOtp}. Expires in 10 minutes.`,
+        }),
       }),
-      sendPhoneOtp(normalizedPhone, phoneOtp, {
-        notificationServiceUrl: notificationUrl,
-        expiresMinutes: OTP_EXPIRY_MINUTES,
+      fetch(`${url}/send-sms`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: normalizedPhone, text: smsText }),
       }),
     ]);
 
-    if (!emailResult.ok) {
+    if (!emailResp.ok) {
       return res.status(502).json({
         success: false,
         status: "ERROR",
-        message: emailResult.error || "Failed to send email OTP. Please try again.",
+        message: "Failed to send email OTP. Please try again.",
         data: null,
       });
     }
-    if (!phoneResult.ok) {
+    if (!smsResp.ok) {
       return res.status(502).json({
         success: false,
         status: "ERROR",
-        message: phoneResult.error || "Failed to send phone OTP. Please try again.",
+        message: "Failed to send phone OTP. Please try again.",
         data: null,
       });
     }
