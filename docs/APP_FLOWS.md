@@ -23,7 +23,50 @@ Documentation for frontend and integration. Update when you add or change comple
 - Step 3 requires email to have been verified in the last 15 minutes and validates `phone_otp` then creates the user.
 - Role from header `X-App-Role` (default customer).
 
+### Resend OTP
+
+The same endpoint is used for **first-time OTP** and **resend**. No separate resend endpoint.
+
+| Use case | Endpoint | Body | Behaviour |
+|----------|----------|------|-----------|
+| First time or resend to **both** | `POST /auth/signup/request-otp` | `email`, `phone` | Sends OTP to email and phone (default). |
+| Resend to **email only** | `POST /auth/signup/request-otp` | `email`, `phone`, `send_phone: false` | Sends OTP only to email. |
+| Resend to **phone only** | `POST /auth/signup/request-otp` | `email`, `phone`, `send_email: false` | Sends OTP only to phone (SMS). |
+| Resend to **both** | `POST /auth/signup/request-otp` | `email`, `phone`, `send_email: true`, `send_phone: true` | Same as first time; OTP refreshed and sent to both. |
+
+- **Optional body fields:** `send_email` (default `true`), `send_phone` (default `true`). At least one must be `true`.
+- A new OTP is stored for the same email/phone; previous OTP remains valid until it expires (or is used). Frontend can show “Code sent again to email” / “Code sent again to phone” based on what was requested.
+- With `USE_DEV_OTP=1`, resend still returns/logs the same dev OTP (`123456`).
+
 **Legacy (still available):** `POST /auth/signup/email/request-otp` (email only), `POST /auth/signup/phone/request-otp` + `verify-otp` for the old 5-step flow.
+
+### Testing OTP (how to get the correct OTP)
+
+**Option A – Dev OTP (no notification service)**  
+Use a fixed OTP so you can test without email/SMS or a running notification-service.
+
+1. In `.env` (auth-service or root) set:
+   ```bash
+   USE_DEV_OTP=1
+   ```
+2. Restart the auth-service.
+3. Call `POST /auth/signup/request-otp` with `email` and `phone`. The response may include `data.dev_otp` (e.g. `123456`), and the same code is logged in the auth-service console.
+4. For **email verify** use OTP **`123456`** (or the value from `data.dev_otp` / logs).
+5. For **register** use the same **`123456`** as `phone_otp`.
+
+So in dev with `USE_DEV_OTP=1` you always use **`123456`** for both steps.
+
+**Option B – Real notification service**  
+Use the real notification-service so OTPs are sent by email/SMS.
+
+1. Do **not** set `USE_DEV_OTP` (or set `USE_DEV_OTP=0`).
+2. Ensure `NOTIFICATION_SERVICE_URL` points at your notification-service (e.g. `http://notification-service:3006` in Docker, or your deployed URL).
+3. Run the notification-service (and configure SMTP/SMS so it can send).
+4. Call `POST /auth/signup/request-otp`; the service will send the OTP to the given email and phone.
+5. Get the **email OTP** from the inbox (or notification-service logs if it logs outgoing messages).
+6. Use that code in `POST /auth/signup/email/verify-otp`.
+7. Get the **phone OTP** from the SMS (or logs).
+8. Use that code as `phone_otp` in `POST /auth/register`.
 
 ---
 

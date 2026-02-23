@@ -14,17 +14,27 @@ export interface OtpCodeRecord {
   created_at: Date;
 }
 
+export const DEV_OTP_CODE = "123456";
+
 export function generateOtpCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-/** Store OTP for email (invalidates previous unused for this email) */
+export function getOtpForStorage(): string {
+  if (process.env.USE_DEV_OTP === "1" || process.env.USE_DEV_OTP === "true") {
+    return DEV_OTP_CODE;
+  }
+  return generateOtpCode();
+}
+
+/** Store OTP for email. Optional code: pass for dev (e.g. 123456). */
 export async function storeOtpForEmail(
   pool: Pool,
   email: string,
-  expiresInMinutes: number = 10
+  expiresInMinutes: number = 10,
+  code?: string
 ): Promise<string> {
-  const code = generateOtpCode();
+  const otp = code ?? generateOtpCode();
   const expiresAt = new Date();
   expiresAt.setMinutes(expiresAt.getMinutes() + expiresInMinutes);
   await pool.query(
@@ -33,18 +43,19 @@ export async function storeOtpForEmail(
   );
   await pool.query(
     `INSERT INTO auth.otp_codes (email, phone, code, expires_at, is_used, attempts) VALUES ($1, NULL, $2, $3, false, 0)`,
-    [email, code, expiresAt]
+    [email, otp, expiresAt]
   );
-  return code;
+  return otp;
 }
 
-/** Store OTP for phone (invalidates previous unused for this phone) */
+/** Store OTP for phone. Optional code: pass for dev (e.g. 123456). */
 export async function storeOtpForPhone(
   pool: Pool,
   phone: string,
-  expiresInMinutes: number = 10
+  expiresInMinutes: number = 10,
+  code?: string
 ): Promise<string> {
-  const code = generateOtpCode();
+  const otp = code ?? generateOtpCode();
   const expiresAt = new Date();
   expiresAt.setMinutes(expiresAt.getMinutes() + expiresInMinutes);
   await pool.query(
@@ -53,9 +64,9 @@ export async function storeOtpForPhone(
   );
   await pool.query(
     `INSERT INTO auth.otp_codes (email, phone, code, expires_at, is_used, attempts) VALUES (NULL, $1, $2, $3, false, 0)`,
-    [phone, code, expiresAt]
+    [phone, otp, expiresAt]
   );
-  return code;
+  return otp;
 }
 
 /** Validate OTP for email; returns record if valid so caller can mark used */

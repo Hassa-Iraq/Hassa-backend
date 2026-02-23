@@ -13,6 +13,7 @@ import { hashPassword, comparePassword } from "../utils/password";
 import { generateToken } from "../utils/jwt";
 import { validatePhoneFormat } from "../utils/phone";
 import {
+  getOtpForStorage,
   storeOtpForEmail,
   storeOtpForPhone,
   validateOtpForEmail,
@@ -381,12 +382,13 @@ export const me = async (req: AuthRequest, res: Response) => {
 
 /**
  * POST /auth/signup/request-otp
- * Body: { email, phone }
- * Checks email/phone not registered, sends OTP to both. Then user does email/verify-otp, then register with phone_otp.
+ * Body: { email, phone, send_email?, send_phone? }
+ * send_email (default true) and send_phone (default true): set to false to skip that channel (e.g. resend only to phone).
+ * Always stores OTP for both; sends only to the requested channels. Use for initial send and resend.
  */
 export const signupRequestOtp = async (req: AuthRequest, res: Response) => {
   try {
-    const { email, phone } = req.body;
+    const { email, phone, send_email, send_phone } = req.body;
     if (!email || !phone || typeof phone !== "string") {
       return res.status(400).json({
         success: false,
@@ -395,6 +397,17 @@ export const signupRequestOtp = async (req: AuthRequest, res: Response) => {
         data: null,
       });
     }
+    const sendToEmail = send_email !== false;
+    const sendToPhone = send_phone !== false;
+    if (!sendToEmail && !sendToPhone) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "At least one of send_email or send_phone must be true",
+        data: null,
+      });
+    }
+
     const emailTrimmed = trim(email).toLowerCase();
     const normalizedPhone = trim(phone).startsWith("+") ? trim(phone) : "+" + trim(phone);
 
@@ -433,34 +446,50 @@ export const signupRequestOtp = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const [emailOtp, phoneOtp] = await Promise.all([
-      storeOtpForEmail(pool as Pool, emailTrimmed, 10),
-      storeOtpForPhone(pool as Pool, normalizedPhone, 10),
+    const otp = getOtpForStorage();
+    const expiresMinutes = 10;
+
+    await Promise.all([
+      storeOtpForEmail(pool as Pool, emailTrimmed, expiresMinutes, otp),
+      storeOtpForPhone(pool as Pool, normalizedPhone, expiresMinutes, otp),
     ]);
+
 
     const url = config.NOTIFICATION_SERVICE_URL || "http://notification-service:3006";
-    const emailHtml = `<!DOCTYPE html><html><body><h2>Email Verification</h2><p>Your code: <strong>${emailOtp}</strong></p><p>Expires in 10 minutes.</p></body></html>`;
-    const smsText = `Your Food App verification code is: ${phoneOtp}. Expires in 10 minutes.`;
+    const emailHtml = `<!DOCTYPE html><html><body><h2>Email Verification</h2><p>Your code: <strong>${otp}</strong></p><p>Expires in ${expiresMinutes} minutes.</p></body></html>`;
+    const smsText = `Your Food App verification code is ${otp}. Expires in ${expiresMinutes} minutes.`;
 
-    const [emailResp, smsResp] = await Promise.all([
-      fetch(`${url}/send-email`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to: emailTrimmed,
-          subject: "Food App - Email Verification Code",
-          html: emailHtml,
-          text: `Your verification code is: ${emailOtp}. Expires in 10 minutes.`,
-        }),
-      }),
-      fetch(`${url}/send-sms`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to: normalizedPhone, text: smsText }),
-      }),
-    ]);
+    type FetchResponse = Awaited<ReturnType<typeof fetch>>;
+    const promises: Promise<FetchResponse>[] = [];
+    if (sendToEmail) {
+      promises.push(
+        fetch(`${url}/send-email`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: emailTrimmed,
+            subject: "Food App - Email Verification Code",
+            html: emailHtml,
+            text: `Your verification code is ${otp}. Expires in ${expiresMinutes} minutes.`,
+          }),
+        })
+      );
+    }
+    if (sendToPhone) {
+      promises.push(
+        fetch(`${url}/send-sms`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ to: normalizedPhone, text: smsText }),
+        })
+      );
+    }
 
-    if (!emailResp.ok) {
+    const results = await Promise.all(promises);
+    const emailResp: FetchResponse | null = sendToEmail ? results[0]! : null;
+    const smsResp: FetchResponse | null = sendToPhone ? (sendToEmail ? results[1]! : results[0]!) : null;
+
+    if (emailResp && !emailResp.ok) {
       return res.status(502).json({
         success: false,
         status: "ERROR",
@@ -468,8 +497,7 @@ export const signupRequestOtp = async (req: AuthRequest, res: Response) => {
         data: null,
       });
     }
-
-    if (!smsResp.ok) {
+    if (smsResp && !smsResp.ok) {
       return res.status(502).json({
         success: false,
         status: "ERROR",
@@ -478,10 +506,16 @@ export const signupRequestOtp = async (req: AuthRequest, res: Response) => {
       });
     }
 
+    const message =
+      sendToEmail && sendToPhone
+        ? "Verification code sent to your email and phone"
+        : sendToPhone
+          ? "Verification code sent to your phone"
+          : "Verification code sent to your email";
     return res.status(200).json({
       success: true,
       status: "OK",
-      message: "Verification code sent to your email and phone",
+      message,
       data: null,
     });
   } catch (err) {
