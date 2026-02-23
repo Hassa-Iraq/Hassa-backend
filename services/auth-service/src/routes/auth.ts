@@ -10,6 +10,8 @@ router.post("/login/phone", authController.loginPhone);
 
 router.get("/me", authenticate, authController.me);
 
+router.post("/admin", authController.addAdmin);
+
 router.post("/signup/request-otp", authController.signupRequestOtp);
 router.post("/signup/email/verify-otp", authController.signupEmailVerifyOtp);
 

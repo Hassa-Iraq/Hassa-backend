@@ -529,6 +529,110 @@ export const signupRequestOtp = async (req: AuthRequest, res: Response) => {
 };
 
 /**
+ * POST /auth/admin
+ * Body: { email, password, phone? }. Only existing admin can add another admin.
+ */
+export const addAdmin = async (req: AuthRequest, res: Response) => {
+  try {
+    const { email, password, phone } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Email and password are required",
+        data: null,
+      });
+    }
+
+    const emailTrimmed = trim(email).toLowerCase();
+    if (!isValidEmail(emailTrimmed)) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Please provide a valid email address",
+        data: null,
+      });
+    }
+
+    if (!isValidPassword(password)) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Password must be at least 8 characters and contain one uppercase letter, one lowercase letter, and one number",
+        data: null,
+      });
+    }
+
+    if (await User.existsByEmail(emailTrimmed)) {
+      return res.status(409).json({
+        success: false,
+        status: "ERROR",
+        message: "Email is already registered",
+        data: null,
+      });
+    }
+
+    let normalizedPhone: string | null = null;
+    if (phone != null && trim(String(phone)) !== "") {
+      normalizedPhone = trim(String(phone)).startsWith("+") ? trim(String(phone)) : "+" + trim(String(phone));
+      if (!validatePhoneFormat(normalizedPhone)) {
+        return res.status(400).json({
+          success: false,
+          status: "ERROR",
+          message: "Invalid phone number. Use E.164 format (e.g. +923001234567)",
+          data: null,
+        });
+      }
+      if (await User.existsByPhone(normalizedPhone)) {
+        return res.status(409).json({
+          success: false,
+          status: "ERROR",
+          message: "Phone number is already registered",
+          data: null,
+        });
+      }
+    }
+
+    const roleRow = await Role.findByName("admin");
+    if (!roleRow) {
+      return res.status(500).json({
+        success: false,
+        status: "ERROR",
+        message: "Admin role not found",
+        data: null,
+      });
+    }
+
+    const passwordHash = await hashPassword(password);
+    const created = await User.create({
+      email: emailTrimmed,
+      phone: normalizedPhone ?? undefined,
+      password_hash: passwordHash,
+      role_id: roleRow.id,
+      email_verified: true,
+      phone_verified: !!normalizedPhone,
+    });
+
+    const userForResponse = { ...created, role_name: "admin" } as User.UserRow & { role_name: string };
+    return res.status(201).json({
+      success: true,
+      status: "OK",
+      message: "Admin created successfully",
+      data: {
+        user: User.toUserResponse(userForResponse, { email_verified: true, phone_verified: !!normalizedPhone }),
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to create admin",
+      data: null,
+    });
+  }
+};
+
+/**
  * POST /auth/signup/email/verify-otp
  * Body: { email, otp }
  * Marks email OTP used. Next: POST /auth/register with phone_otp.
