@@ -53,7 +53,8 @@ food-app/
 │   ├── db-connection/           # PostgreSQL connection pool
 │   └── swagger-config/          # Swagger/OpenAPI configuration
 ├── database/
-│   ├── migrations/              # Database migrations (node-pg-migrate)
+│   ├── migrations/              # Legacy migrations (node-pg-migrate)
+│   ├── migrations_initial/      # New initial schema (npm run migrate / migrate:fresh)
 │   └── package.json
 ├── nginx/
 │   └── nginx.conf              # API Gateway configuration
@@ -107,7 +108,7 @@ food-app/
    npm run migrate
    ```
 
-   This will install dependencies (including migration tools) and run all pending migrations.
+   This applies the **new initial schema** (`database/migrations_initial/`) to the current database (e.g. `hassa`). It does **not** drop the database. For a **fresh** database (drop old DBs, create `hassa`, then apply schema), use **`npm run migrate:fresh`** (e.g. on the server).
 
 5. **Verify services are running**
    ```bash
@@ -150,7 +151,7 @@ The auth service automatically creates the first admin user on startup if none e
 | ------------------- | ----------------------------- | ------------------------------- |
 | `POSTGRES_HOST`     | PostgreSQL host               | `postgres`                      |
 | `POSTGRES_PORT`     | PostgreSQL host port (Docker) | `5433` (5432 inside containers) |
-| `POSTGRES_DB`       | Database name                 | `food_delivery`                 |
+| `POSTGRES_DB`       | Database name                 | `hassa`                         |
 | `POSTGRES_USER`     | Database user                 | `postgres`                      |
 | `POSTGRES_PASSWORD` | Database password             | `postgres`                      |
 | `REDIS_HOST`        | Redis host                    | `redis`                         |
@@ -550,18 +551,11 @@ The database uses **schema-based isolation** - each service has its own PostgreS
 
 ### Running Migrations
 
-```bash
-# Run all pending migrations
-npm run migrate
+- **`npm run migrate`** – Applies the new initial schema from `database/migrations_initial/` to the current database (no DB drop).
+- **`npm run migrate:fresh`** – Drops old DBs (`food_delivery`, `hassa`), creates `hassa`, and applies the initial schema. Use when you want a clean DB (e.g. on server).
+- **`npm run migrate:legacy`** – Runs the older node-pg-migrate migrations from `database/migrations/` (e.g. `npm run migrate:down`, `npm run migrate:create add_user_table` for that set).
 
-# Rollback last migration
-npm run migrate:down
-
-# Create a new migration
-npm run migrate:create add_user_table
-```
-
-Migration files are created in `database/migrations/`.
+See **database/migrations_initial/README.md** and **docs/APP_FLOWS.md** for details.
 
 ## Shared Utilities
 
@@ -687,7 +681,7 @@ docker compose exec auth-service sh
 **Check database:**
 
 ```bash
-docker compose exec postgres psql -U postgres -d food_delivery
+docker compose exec postgres psql -U postgres -d hassa
 ```
 
 ### Troubleshooting
@@ -709,7 +703,7 @@ docker compose exec postgres psql -U postgres -d food_delivery
 
 - Verify PostgreSQL is running: `docker compose ps postgres`
 - Check connection string in `.env`
-- Ensure migrations have run: `npm run migrate`
+- Ensure migrations have run: `npm run migrate` (or `npm run migrate:fresh` for a clean DB)
 
 **Swagger not loading:**
 
@@ -902,7 +896,7 @@ You can create a manual backup at any time:
 # On your server
 cd $HOME/food-app
 mkdir -p backups
-docker compose exec -T postgres pg_dump -U postgres food_delivery > backups/backup_$(date +%Y%m%d_%H%M%S).sql
+docker compose exec -T postgres pg_dump -U postgres hassa > backups/backup_$(date +%Y%m%d_%H%M%S).sql
 ```
 
 ### Restoring from Backup
@@ -917,7 +911,7 @@ cd $HOME/food-app
 ls -lh backups/
 
 # Restore a specific backup (replace with actual filename)
-docker compose exec -T postgres psql -U postgres food_delivery < backups/backup_20260116_143022.sql
+docker compose exec -T postgres psql -U postgres hassa < backups/backup_20260116_143022.sql
 ```
 
 **⚠️ Warning:** Restoring a backup will overwrite the current database. Make sure to create a backup before restoring.
