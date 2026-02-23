@@ -101,4 +101,3 @@ dist
 backups/
 *.sql
 !database/migrations/*.sql
-!database/migrations_initial/*.sql

@@ -108,7 +108,7 @@ food-app/
    npm run migrate
    ```
 
-   This applies the **new initial schema** (`database/migrations_initial/`) to the current database (e.g. `hassa`). It does **not** drop the database. For a **fresh** database (drop old DBs, create `hassa`, then apply schema), use **`npm run migrate:fresh`** (e.g. on the server).
+   This applies the **new initial schema** (`database/migrations/`) to the current database (e.g. `hassa`). It does **not** drop the database.
 
 5. **Verify services are running**
    ```bash
@@ -551,9 +551,7 @@ The database uses **schema-based isolation** - each service has its own PostgreS
 
 ### Running Migrations
 
-- **`npm run migrate`** – Applies the new initial schema from `database/migrations_initial/` to the current database (no DB drop).
-- **`npm run migrate:fresh`** – Drops old DBs (`food_delivery`, `hassa`), creates `hassa`, and applies the initial schema. Use when you want a clean DB (e.g. on server).
-- **`npm run migrate:legacy`** – Runs the older node-pg-migrate migrations from `database/migrations/` (e.g. `npm run migrate:down`, `npm run migrate:create add_user_table` for that set).
+- **`npm run migrate`** – Applies the new initial schema from `database/migrations/` to the current database (no DB drop).
 
 See **docs/APP_FLOWS.md** for details.
 

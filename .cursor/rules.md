@@ -70,7 +70,7 @@ No other technologies may be introduced without approval.
 ### Migration Best Practices (MANDATORY)
 
 - **NEVER edit existing migration files that have already been executed in production or shared databases**
-- **ALWAYS create new migration files for schema changes** - Use sequential numbering (e.g., `006_auth_password_reset_tokens.up.sql`)
+- **ALWAYS create new migration files for schema changes** - Use sequential numbering (e.g., `202502130000001_initial_schema.sql`)
 - Migration files must be in `database/migrations/` directory
 - Each migration must have both `.up.sql` and `.down.sql` files
 - Migration file naming: `{number}_{description}.{up|down}.sql`

@@ -1,5 +1,5 @@
 /**
- * Applies the initial schema (database/migrations_initial) to the current database.
+ * Applies the initial schema (database/migrations) to the current database.
  */
 
 const { readFileSync } = require("fs");
@@ -7,8 +7,8 @@ const { join } = require("path");
 const { Client } = require("pg");
 
 const rootDir = join(__dirname, "..");
-const migrationsInitialDir = join(rootDir, "database", "migrations_initial");
-const initialSchemaFile = join(migrationsInitialDir, "20250213000001_initial_schema.sql");
+const migrationsInitialDir = join(rootDir, "database", "migrations");
+const initialSchemaFile = join(migrationsDir, "20250213000001_initial_schema.sql");
 
 function loadEnvFile() {
   try {
