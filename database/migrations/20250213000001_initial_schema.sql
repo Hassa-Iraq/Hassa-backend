@@ -30,6 +30,9 @@ CREATE TABLE IF NOT EXISTS auth.users (
   date_of_birth DATE,
   bio TEXT,
   profile_picture_url TEXT,
+  udid VARCHAR(255),
+  device_info JSONB,
+  push_token TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT users_email_or_phone CHECK (email IS NOT NULL OR phone IS NOT NULL)

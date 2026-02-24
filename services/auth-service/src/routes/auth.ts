@@ -9,6 +9,7 @@ router.post("/login", authController.login);
 router.post("/login/phone", authController.loginPhone);
 
 router.get("/me", authenticate, authController.me);
+router.patch("/profile", authenticate, authController.updateProfile);
 
 router.post("/admin", authenticate, authorize("admin"), authController.addAdmin);
 

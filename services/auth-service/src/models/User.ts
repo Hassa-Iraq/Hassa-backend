@@ -1,7 +1,7 @@
 import pool from "../db/connection";
 
 export const USER_SELECT =
-  "u.id, u.email, u.phone, u.full_name, u.date_of_birth, u.bio, u.profile_picture_url, r.name as role, u.created_at, u.updated_at";
+  "u.id, u.email, u.phone, u.full_name, u.date_of_birth, u.bio, u.profile_picture_url, u.udid, u.device_info, u.push_token, r.name as role, u.created_at, u.updated_at";
 
 export interface UserRow {
   id: string;
@@ -11,6 +11,9 @@ export interface UserRow {
   date_of_birth?: string | Date | null;
   bio?: string | null;
   profile_picture_url?: string | null;
+  udid?: string | null;
+  device_info?: Record<string, unknown> | null;
+  push_token?: string | null;
   role?: string;
   role_name?: string;
   created_at?: Date;
@@ -29,6 +32,9 @@ export interface UserResponse {
   date_of_birth: string | null;
   bio: string | null;
   profile_picture_url: string | null;
+  udid: string | null;
+  device_info: Record<string, unknown> | null;
+  push_token: string | null;
   role: string;
   created_at: Date;
   updated_at: Date | null;
@@ -47,6 +53,10 @@ export function toUserResponse(
     : null;
   const roleName =
     (user as UserRow & { role?: string }).role ?? user.role_name ?? "customer";
+  const deviceInfo =
+    user.device_info != null && typeof user.device_info === "object"
+      ? (user.device_info as Record<string, unknown>)
+      : null;
   return {
     id: user.id,
     email: user.email,
@@ -55,6 +65,9 @@ export function toUserResponse(
     date_of_birth: dateOfBirth,
     bio: user.bio ?? null,
     profile_picture_url: user.profile_picture_url ?? null,
+    udid: user.udid ?? null,
+    device_info: deviceInfo,
+    push_token: user.push_token ?? null,
     role: roleName,
     created_at: user.created_at!,
     updated_at: user.updated_at ?? null,
@@ -193,6 +206,9 @@ export async function updateProfile(
     date_of_birth?: string | null;
     bio?: string | null;
     profile_picture_url?: string | null;
+    udid?: string | null;
+    device_info?: Record<string, unknown> | null;
+    push_token?: string | null;
   }
 ): Promise<void> {
   const set: string[] = [];
@@ -213,6 +229,18 @@ export async function updateProfile(
   if (updates.profile_picture_url !== undefined) {
     set.push(`profile_picture_url = $${i++}`);
     values.push(updates.profile_picture_url);
+  }
+  if (updates.udid !== undefined) {
+    set.push(`udid = $${i++}`);
+    values.push(updates.udid);
+  }
+  if (updates.device_info !== undefined) {
+    set.push(`device_info = $${i++}`);
+    values.push(updates.device_info);
+  }
+  if (updates.push_token !== undefined) {
+    set.push(`push_token = $${i++}`);
+    values.push(updates.push_token);
   }
   if (set.length === 0) return;
   values.push(userId);

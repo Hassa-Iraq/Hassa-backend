@@ -382,6 +382,99 @@ export const me = async (req: AuthRequest, res: Response) => {
 };
 
 /**
+ * PATCH /auth/profile
+ * Body: { full_name?, date_of_birth?, profile_picture_url?, bio?, udid?, device_info?, push_token? }
+ * All fields optional. Updates only provided fields. Requires authentication.
+ */
+export const updateProfile = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({
+        success: false,
+        status: "ERROR",
+        message: "Authentication required",
+        data: null,
+      });
+    }
+
+    const { full_name, date_of_birth, profile_picture_url, bio, udid, device_info, push_token } = req.body;
+
+    const updates: Parameters<typeof User.updateProfile>[1] = {};
+    if (full_name !== undefined) {
+      updates.full_name = typeof full_name === "string" ? (full_name.trim() || null) : null;
+    }
+    if (date_of_birth !== undefined) {
+      const dob = typeof date_of_birth === "string" ? date_of_birth.trim() : null;
+      if (dob !== null && dob !== "") {
+        const parsed = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dob);
+        if (!parsed) {
+          return res.status(400).json({
+            success: false,
+            status: "ERROR",
+            message: "date_of_birth must be YYYY-MM-DD",
+            data: null,
+          });
+        }
+        updates.date_of_birth = dob;
+      } else {
+        updates.date_of_birth = null;
+      }
+    }
+    if (profile_picture_url !== undefined) {
+      updates.profile_picture_url = typeof profile_picture_url === "string" ? (profile_picture_url.trim() || null) : null;
+    }
+    if (bio !== undefined) {
+      updates.bio = typeof bio === "string" ? (bio.trim() || null) : null;
+    }
+    if (udid !== undefined) {
+      updates.udid = typeof udid === "string" ? (udid.trim() || null) : null;
+    }
+    if (device_info !== undefined) {
+      updates.device_info =
+        device_info != null && typeof device_info === "object" && !Array.isArray(device_info)
+          ? (device_info as Record<string, unknown>)
+          : null;
+    }
+    if (push_token !== undefined) {
+      updates.push_token = typeof push_token === "string" ? (push_token.trim() || null) : null;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Provide at least one field to update (full_name, date_of_birth, profile_picture_url, bio, udid, device_info, push_token)",
+        data: null,
+      });
+    }
+
+    await User.updateProfile(req.user.id, updates);
+    const user = await User.findByIdForProfile(req.user.id);
+    if (!user) {
+      return res.status(500).json({
+        success: false,
+        status: "ERROR",
+        message: "Profile updated but could not load user",
+        data: null,
+      });
+    }
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Profile updated successfully",
+      data: { user: User.toUserResponse(user) },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to update profile",
+      data: null,
+    });
+  }
+};
+
+/**
  * POST /auth/signup/request-otp
  * Body: { email, phone, send_email?, send_phone? }
  * send_email (default true) and send_phone (default true): set to false to send only to the other channel.
