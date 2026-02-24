@@ -1,20 +1,20 @@
 /**
- * Applies the initial schema (database/migrations) to the current database.
+ * Migration script that loads .env and constructs DATABASE_URL
+ * for node-pg-migrate
  */
 
 const { readFileSync } = require("fs");
 const { join } = require("path");
-const { Client } = require("pg");
+const { execSync } = require("child_process");
 
 const rootDir = join(__dirname, "..");
-const migrationsInitialDir = join(rootDir, "database", "migrations");
-const initialSchemaFile = join(migrationsDir, "20250213000001_initial_schema.sql");
 
 function loadEnvFile() {
   try {
     const envPath = join(rootDir, ".env");
     const envContent = readFileSync(envPath, "utf-8");
     const env = {};
+
     envContent.split("\n").forEach((line) => {
       line = line.trim();
       if (line && !line.startsWith("#")) {
@@ -25,10 +25,11 @@ function loadEnvFile() {
         }
       }
     });
+
     return env;
   } catch (error) {
     if (error.code !== "ENOENT") {
-      console.error("Error loading .env file", error.message);
+      console.error("Error loading .env file:", error.message);
     }
     return {};
   }
@@ -37,50 +38,61 @@ function loadEnvFile() {
 function loadEnv() {
   const envFile = loadEnvFile();
   const merged = { ...envFile };
+
   Object.keys(process.env).forEach((key) => {
     if (process.env[key] !== undefined) {
       merged[key] = process.env[key];
     }
   });
+
   return merged;
 }
 
-function getDbConfig(env) {
+function getDatabaseUrl(env) {
   let host = env.POSTGRES_HOST || "localhost";
   if (host === "postgres") {
     host = "localhost";
   }
-  const port = parseInt(env.POSTGRES_PORT || (host === "localhost" ? "5433" : "5432"), 10);
+
+  const port = env.POSTGRES_PORT || (host === "localhost" ? "5433" : "5432");
   const database = env.POSTGRES_DB || "hassa";
   const user = env.POSTGRES_USER || "postgres";
   const password = env.POSTGRES_PASSWORD || "postgres";
-  return { host, port, database, user, password };
+
+  const passwordStr = String(password);
+
+  const encode = (s) => encodeURIComponent(s);
+  return `postgres://${encode(user)}:${encode(passwordStr)}@${host}:${port}/${database}`;
 }
 
-async function run() {
-  const env = loadEnv();
-  const config = getDbConfig(env);
+const env = loadEnv();
+const databaseUrl = getDatabaseUrl(env);
 
-  let sql;
-  try {
-    sql = readFileSync(initialSchemaFile, "utf-8");
-  } catch (error) {
-    console.error("Error: Initial schema file not found", initialSchemaFile);
-    process.exit(1);
-  }
-
-  const client = new Client(config);
-  try {
-    await client.connect();
-    console.log("Applying initial schema to database", config.database);
-    await client.query(sql);
-    console.log("Done. Initial schema applied.");
-  } catch (error) {
-    console.error("Migration failed", error.message);
-    process.exit(1);
-  } finally {
-    await client.end();
-  }
+if (!databaseUrl || typeof databaseUrl !== "string") {
+  console.error("Error: Could not build DATABASE_URL from .env or environment.");
+  console.error("Ensure .env exists in the project root with POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD.");
+  process.exit(1);
 }
 
-run();
+const args = process.argv.slice(2);
+const command = args[0] || "up";
+
+const migrationsDir = join(rootDir, "database", "migrations");
+
+const childEnv = { ...process.env, DATABASE_URL: databaseUrl };
+
+try {
+  const migrateConfig = `--migrations-dir "${migrationsDir}"`;
+  const fullCommand = `node-pg-migrate ${command} ${migrateConfig} ${args
+    .slice(1)
+    .join(" ")}`.trim();
+
+  execSync(fullCommand, {
+    stdio: "inherit",
+    env: childEnv,
+    cwd: rootDir,
+    shell: true,
+  });
+} catch (error) {
+  process.exit(1);
+}
