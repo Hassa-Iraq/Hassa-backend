@@ -19,7 +19,6 @@ import {
   validateOtpForEmail,
   validateOtpForPhone,
   markOtpCodeUsed,
-  wasEmailRecentlyVerified,
 } from "../utils/otpCodes";
 import config from "../config/index";
 import { Pool } from "pg";
@@ -27,7 +26,7 @@ import pool from "../db/connection";
 
 /**
  * POST /auth/register
- * After: signup/request-otp then signup/email/verify-otp.
+ * Registration requires phone OTP only. Flow: signup/request-otp (send to phone or both) → register with phone_otp.
  * Body: { email, password, phone, phone_otp }
  * Header: X-App-Role (optional: customer | restaurant | driver)
  */
@@ -82,6 +81,7 @@ export const register = async (req: AuthRequest, res: Response) => {
       });
     }
 
+    /*
     if (!(await wasEmailRecentlyVerified(pool as Pool, emailTrimmed, 15))) {
       return res.status(400).json({
         success: false,
@@ -90,6 +90,7 @@ export const register = async (req: AuthRequest, res: Response) => {
         data: null,
       });
     }
+    */
 
     const phoneOtpValidation = await validateOtpForPhone(pool as Pool, normalizedPhone, String(phone_otp).trim());
     if (!phoneOtpValidation.valid || !phoneOtpValidation.record) {
@@ -383,8 +384,8 @@ export const me = async (req: AuthRequest, res: Response) => {
 /**
  * POST /auth/signup/request-otp
  * Body: { email, phone, send_email?, send_phone? }
- * send_email (default true) and send_phone (default true): set to false to skip that channel (e.g. resend only to phone).
- * Always stores OTP for both; sends only to the requested channels. Use for initial send and resend.
+ * send_email (default true) and send_phone (default true): set to false to send only to the other channel.
+ * Stores OTP only for the channel(s) we send to. When sending to both, email and phone get separate OTPs.
  */
 export const signupRequestOtp = async (req: AuthRequest, res: Response) => {
   try {
@@ -446,22 +447,24 @@ export const signupRequestOtp = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const otp = getOtpForStorage();
     const expiresMinutes = 10;
+    let otpEmail: string | null = null;
+    let otpPhone: string | null = null;
 
-    await Promise.all([
-      storeOtpForEmail(pool as Pool, emailTrimmed, expiresMinutes, otp),
-      storeOtpForPhone(pool as Pool, normalizedPhone, expiresMinutes, otp),
-    ]);
-
+    if (sendToEmail) {
+      otpEmail = getOtpForStorage();
+      await storeOtpForEmail(pool as Pool, emailTrimmed, expiresMinutes, otpEmail);
+    }
+    if (sendToPhone) {
+      otpPhone = getOtpForStorage();
+      await storeOtpForPhone(pool as Pool, normalizedPhone, expiresMinutes, otpPhone);
+    }
 
     const url = config.NOTIFICATION_SERVICE_URL || "http://notification-service:3006";
-    const emailHtml = `<!DOCTYPE html><html><body><h2>Email Verification</h2><p>Your code: <strong>${otp}</strong></p><p>Expires in ${expiresMinutes} minutes.</p></body></html>`;
-    const smsText = `Your Food App verification code is ${otp}. Expires in ${expiresMinutes} minutes.`;
-
     type FetchResponse = Awaited<ReturnType<typeof fetch>>;
     const promises: Promise<FetchResponse>[] = [];
-    if (sendToEmail) {
+    if (sendToEmail && otpEmail) {
+      const emailHtml = `<!DOCTYPE html><html><body><h2>Email Verification</h2><p>Your code: <strong>${otpEmail}</strong></p><p>Expires in ${expiresMinutes} minutes.</p></body></html>`;
       promises.push(
         fetch(`${url}/send-email`, {
           method: "POST",
@@ -470,12 +473,13 @@ export const signupRequestOtp = async (req: AuthRequest, res: Response) => {
             to: emailTrimmed,
             subject: "Food App - Email Verification Code",
             html: emailHtml,
-            text: `Your verification code is ${otp}. Expires in ${expiresMinutes} minutes.`,
+            text: `Your verification code is ${otpEmail}. Expires in ${expiresMinutes} minutes.`,
           }),
         })
       );
     }
-    if (sendToPhone) {
+    if (sendToPhone && otpPhone) {
+      const smsText = `Your Food App verification code is ${otpPhone}. Expires in ${expiresMinutes} minutes.`;
       promises.push(
         fetch(`${url}/send-sms`, {
           method: "POST",
@@ -635,7 +639,7 @@ export const addAdmin = async (req: AuthRequest, res: Response) => {
 /**
  * POST /auth/signup/email/verify-otp
  * Body: { email, otp }
- * Marks email OTP used. Next: POST /auth/register with phone_otp.
+ * Marks email OTP used. Optional: registration only requires phone OTP; use this if you also verify email.
  */
 export const signupEmailVerifyOtp = async (req: AuthRequest, res: Response) => {
   try {
