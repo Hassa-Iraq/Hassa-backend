@@ -15,4 +15,8 @@ router.post("/admin", authenticate, authorize("admin"), authController.addAdmin)
 router.post("/signup/request-otp", authController.signupRequestOtp);
 router.post("/signup/email/verify-otp", authController.signupEmailVerifyOtp);
 
+router.post("/forgot-password", authController.forgotPassword);
+router.post("/forgot-password/verify-otp", authController.verifyForgotPasswordOtp);
+router.post("/reset-password", authController.resetPassword);
+
 export default router;

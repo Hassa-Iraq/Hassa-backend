@@ -101,3 +101,5 @@ dist
 backups/
 *.sql
 !database/migrations/*.sql
+
+postman

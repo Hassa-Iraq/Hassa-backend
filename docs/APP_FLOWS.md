@@ -49,3 +49,20 @@ Same endpoint as step 1. Use it for resend by optionally limiting where the OTP 
 - **Phone:** `POST /auth/login/phone` — body: `phone`, `password`.
 
 Users must have completed email verification (and phone verification if they have a phone) before login.
+
+---
+
+## 3. Forgot / Reset password (phone)
+
+**Flow (3 screens):** Screen 1 – enter **phone** → request OTP. Screen 2 – enter **OTP** → verify, then go to Screen 3. Screen 3 – enter **new password** → reset. User then logs in with phone + new password.
+
+| Step | Screen | Action | Endpoint | Body | Response |
+|------|--------|--------|----------|------|----------|
+| 1 | Enter phone | Request reset OTP | `POST /auth/forgot-password` | `phone` | `200` + same message whether or not phone is registered (no user enumeration). |
+| 2 | Enter OTP | Verify code (optional) | `POST /auth/forgot-password/verify-otp` | `phone`, `otp` | `200` + `data.next_step: "reset_password"` — then navigate to new-password screen. |
+| 3 | New password | Set new password | `POST /auth/reset-password` | `phone`, `otp`, `new_password` | `200` = password updated. Log in with `POST /auth/login/phone` using `phone` + `new_password`. |
+
+- Phone must be E.164 (e.g. `+923001234567`). OTP is 6 digits, valid 10 minutes.
+- Step 2 gives immediate feedback that the OTP is correct before showing the new-password screen. The app should keep `phone` and `otp` and send them again in step 3.
+- Resend OTP: call `POST /auth/forgot-password` again with the same `phone`.
+- Dev OTP: with `USE_DEV_OTP=1`, use code `123456` as `otp` in verify-otp and reset-password.

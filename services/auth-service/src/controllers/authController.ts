@@ -699,3 +699,236 @@ export const signupEmailVerifyOtp = async (req: AuthRequest, res: Response) => {
     });
   }
 };
+
+/**
+ * POST /auth/forgot-password
+ * Body: { phone }
+ * Sends OTP to the given phone if it is registered. Same response either way (no user enumeration).
+ */
+export const forgotPassword = async (req: AuthRequest, res: Response) => {
+  try {
+    const { phone } = req.body;
+    if (!phone || typeof phone !== "string" || !trim(phone)) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Phone number is required",
+        data: null,
+      });
+    }
+
+    const normalizedPhone = trim(phone).startsWith("+") ? trim(phone) : "+" + trim(phone);
+    if (!validatePhoneFormat(normalizedPhone)) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Invalid phone number. Use E.164 format (e.g. +923001234567)",
+        data: null,
+      });
+    }
+
+    const user = await User.findByPhone(normalizedPhone);
+    if (!user) {
+      return res.status(200).json({
+        success: true,
+        status: "OK",
+        message: "If this number is registered, you will receive a verification code shortly.",
+        data: null,
+      });
+    }
+
+    const otp = getOtpForStorage();
+    const expiresMinutes = 10;
+    await storeOtpForPhone(pool as Pool, normalizedPhone, expiresMinutes, otp);
+
+    const url = config.NOTIFICATION_SERVICE_URL || "http://notification-service:3006";
+    const smsText = `Your Food App password reset code is ${otp}. Valid for ${expiresMinutes} minutes.`;
+
+    const fetchResp = await fetch(`${url}/send-sms`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to: normalizedPhone, text: smsText }),
+    });
+
+    if (!fetchResp.ok) {
+      return res.status(502).json({
+        success: false,
+        status: "ERROR",
+        message: "Failed to send verification code. Please try again.",
+        data: null,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "If this number is registered, you will receive a verification code shortly.",
+      data: null,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to process request",
+      data: null,
+    });
+  }
+};
+
+/**
+ * POST /auth/forgot-password/verify-otp
+ * Body: { phone, otp }
+ * Validates the reset OTP only (does not mark used). Use on the OTP screen before navigating to the new-password screen.
+ * Next step: POST /auth/reset-password with same phone, otp, and new_password.
+ */
+export const verifyForgotPasswordOtp = async (req: AuthRequest, res: Response) => {
+  try {
+    const { phone, otp } = req.body;
+    if (!phone || typeof phone !== "string" || !trim(phone)) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Phone number is required",
+        data: null,
+      });
+    }
+    if (!otp || !isValidOtp6(trim(String(otp)))) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Verification code is required (6 digits)",
+        data: null,
+      });
+    }
+
+    const normalizedPhone = trim(phone).startsWith("+") ? trim(phone) : "+" + trim(phone);
+    if (!validatePhoneFormat(normalizedPhone)) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Invalid phone number. Use E.164 format (e.g. +923001234567)",
+        data: null,
+      });
+    }
+
+    const otpValidation = await validateOtpForPhone(pool as Pool, normalizedPhone, trim(String(otp)));
+    if (!otpValidation.valid || !otpValidation.record) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: otpValidation.error ?? "Invalid or expired verification code",
+        data: null,
+      });
+    }
+
+    const user = await User.findByPhone(normalizedPhone);
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Account not found for this phone number",
+        data: null,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Code verified. You can now set your new password.",
+      data: {
+        next_step: "reset_password",
+        phone: normalizedPhone,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to verify code",
+      data: null,
+    });
+  }
+};
+
+/**
+ * POST /auth/reset-password
+ * Body: { phone, otp, new_password }
+ * Verifies OTP sent to phone and sets new password. User can then log in with phone + new password.
+ */
+export const resetPassword = async (req: AuthRequest, res: Response) => {
+  try {
+    const { phone, otp, new_password } = req.body;
+    if (!phone || typeof phone !== "string" || !trim(phone)) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Phone number is required",
+        data: null,
+      });
+    }
+    if (!otp || !isValidOtp6(trim(String(otp)))) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Verification code is required (6 digits)",
+        data: null,
+      });
+    }
+    if (!new_password || !isValidPassword(new_password)) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Password must be at least 8 characters and contain one uppercase letter, one lowercase letter, and one number",
+        data: null,
+      });
+    }
+
+    const normalizedPhone = trim(phone).startsWith("+") ? trim(phone) : "+" + trim(phone);
+    if (!validatePhoneFormat(normalizedPhone)) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Invalid phone number. Use E.164 format (e.g. +923001234567)",
+        data: null,
+      });
+    }
+
+    const otpValidation = await validateOtpForPhone(pool as Pool, normalizedPhone, trim(String(otp)));
+    if (!otpValidation.valid || !otpValidation.record) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: otpValidation.error ?? "Invalid or expired verification code",
+        data: null,
+      });
+    }
+
+    const user = await User.findByPhone(normalizedPhone);
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Account not found for this phone number",
+        data: null,
+      });
+    }
+
+    await markOtpCodeUsed(pool as Pool, otpValidation.record.id);
+    const passwordHash = await hashPassword(new_password);
+    await User.updatePasswordHash(user.id, passwordHash);
+
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Password has been reset. You can now log in with your new password.",
+      data: null,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to reset password",
+      data: null,
+    });
+  }
+};
