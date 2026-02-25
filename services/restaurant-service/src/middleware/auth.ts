@@ -1,83 +1,97 @@
-import { Response, NextFunction } from 'express';
-import { UnauthorizedError, ForbiddenError, RequestWithLogger, asyncHandler } from 'shared/error-handler/index';
-import config from '../config/index';
+import { Request, Response, NextFunction } from "express";
+import config from "../config/index";
 
-/**
- * Validates JWT token by calling Auth Service
- * Attaches user info to request if valid
- */
-export const authenticate = asyncHandler(async (
-  req: RequestWithLogger,
-  _res: Response,
+export interface AuthUser {
+  id: string;
+  role: string;
+  email: string;
+}
+
+export interface AuthRequest extends Request {
+  user?: AuthUser;
+}
+
+export async function authenticate(
+  req: AuthRequest,
+  res: Response,
   next: NextFunction
-): Promise<void> => {
-  const authHeader = req.headers.authorization;
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new UnauthorizedError('No token provided');
-  }
-
-  const token = authHeader.substring(7);
-
-  // Call Auth Service to validate token
-  const authServiceUrl = config.AUTH_SERVICE_URL || 'http://auth-service:3001';
-  const response = await fetch(`${authServiceUrl}/auth/validate`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    req.logger?.error({ status: response.status, error: errorData }, 'Auth service validation failed');
-    throw new UnauthorizedError('Invalid or expired token');
-  }
-
-  const data = await response.json() as {
-    success?: boolean;
-    data?: {
-      valid?: boolean;
-      user?: {
-        id: string;
-        role: string;
-        email: string;
-      };
+): Promise<void> {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      res.status(401).json({
+        success: false,
+        status: "ERROR",
+        message: "No token provided",
+        data: null,
+      });
+      return;
+    }
+    const token = authHeader.substring(7);
+    const authServiceUrl = config.AUTH_SERVICE_URL || "http://auth-service:3001";
+    const response = await fetch(`${authServiceUrl}/auth/me`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) {
+      res.status(401).json({
+        success: false,
+        status: "ERROR",
+        message: "Invalid or expired token",
+        data: null,
+      });
+      return;
+    }
+    const data = (await response.json()) as {
+      success?: boolean;
+      data?: { user?: { id: string; role?: string; email?: string } };
     };
-  };
-
-  if (!data.success || !data.data?.valid || !data.data?.user) {
-    throw new UnauthorizedError('Invalid token');
+    const user = data?.data?.user;
+    if (!data.success || !user?.id) {
+      res.status(401).json({
+        success: false,
+        status: "ERROR",
+        message: "Invalid token",
+        data: null,
+      });
+      return;
+    }
+    req.user = {
+      id: user.id,
+      role: user.role ?? "customer",
+      email: user.email ?? "",
+    };
+    next();
+  } catch {
+    res.status(401).json({
+      success: false,
+      status: "ERROR",
+      message: "Authentication failed",
+      data: null,
+    });
   }
+}
 
-  req.user = {
-    id: data.data.user.id,
-    role: data.data.user.role,
-    email: data.data.user.email,
-  };
-
-  next();
-});
-
-/**
- * Role-based access control middleware
- */
 export function authorize(...allowedRoles: string[]) {
-  return (req: RequestWithLogger, _res: Response, next: NextFunction): void => {
+  return (req: AuthRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {
-      throw new UnauthorizedError('Authentication required');
+      res.status(401).json({
+        success: false,
+        status: "ERROR",
+        message: "Authentication required",
+        data: null,
+      });
+      return;
     }
-
     if (!allowedRoles.includes(req.user.role)) {
-      throw new ForbiddenError('Insufficient permissions');
+      res.status(403).json({
+        success: false,
+        status: "ERROR",
+        message: "Insufficient permissions",
+        data: null,
+      });
+      return;
     }
-
     next();
   };
 }
-
-export default {
-  authenticate,
-  authorize,
-};

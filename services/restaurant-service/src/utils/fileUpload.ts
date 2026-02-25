@@ -2,82 +2,78 @@ import multer from "multer";
 import { Request } from "express";
 import { join } from "path";
 import { existsSync, mkdirSync } from "fs";
-import { createLogger } from "shared/logger/index";
-import config from "../config/index";
 
-const logger = createLogger(config.SERVICE_NAME, config.LOG_LEVEL);
+const BASE_UPLOAD = process.env.UPLOAD_DIR || join(process.cwd(), "uploads");
+const SUBDIRS = ["banners", "restaurants", "menu-items"] as const;
 
-// Define upload directory
-export const UPLOAD_DIR = process.env.UPLOAD_DIR || join(process.cwd(), "uploads", "banners");
-
-// Ensure upload directory exists
-if (!existsSync(UPLOAD_DIR)) {
-  mkdirSync(UPLOAD_DIR, { recursive: true });
-  logger.info({ uploadDir: UPLOAD_DIR }, "Created upload directory");
+for (const sub of SUBDIRS) {
+  const dir = join(BASE_UPLOAD, sub);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
 
-// Configure storage
+export const UPLOAD_DIR = join(BASE_UPLOAD, "banners");
+
+function subdirForField(fieldname: string): string {
+  if (fieldname === "banner_image") return "banners";
+  if (fieldname === "logo" || fieldname === "cover_image" || fieldname === "certificate") return "restaurants";
+  if (fieldname === "item_image") return "menu-items";
+  return "banners";
+}
+
+function prefixForField(fieldname: string): string {
+  if (fieldname === "banner_image") return "banner";
+  if (fieldname === "logo") return "logo";
+  if (fieldname === "cover_image") return "cover";
+  if (fieldname === "certificate") return "cert";
+  if (fieldname === "item_image") return "item";
+  return "file";
+}
+
 const storage = multer.diskStorage({
-  destination: (_req: Request, _file: Express.Multer.File, cb) => {
-    cb(null, UPLOAD_DIR);
+  destination: (_req: Request, file: Express.Multer.File, cb) => {
+    const sub = subdirForField(file.fieldname);
+    cb(null, join(BASE_UPLOAD, sub));
   },
   filename: (_req: Request, file: Express.Multer.File, cb) => {
-    // Generate unique filename: timestamp-random-uuid-originalname
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const ext = file.originalname.split(".").pop();
-    const filename = `banner-${uniqueSuffix}.${ext}`;
-    cb(null, filename);
+    const ext = (file.originalname.split(".").pop() || "jpg").replace(/\s/g, "");
+    const name = `${prefixForField(file.fieldname)}-${Date.now()}-${Math.round(Math.random() * 1e9)}.${ext}`;
+    cb(null, name);
   },
 });
 
-// File filter - only allow images
 const fileFilter = (
   _req: Request,
   file: Express.Multer.File,
   cb: multer.FileFilterCallback
 ) => {
-  // Check if file is an image
-  if (file.mimetype.startsWith("image/")) {
+  if (file.mimetype.startsWith("image/") || file.mimetype === "application/pdf") {
     cb(null, true);
   } else {
-    cb(new Error("Only image files are allowed"));
+    cb(new Error("Only image or PDF files are allowed"));
   }
 };
 
-// Configure multer
 export const upload = multer({
   storage,
   fileFilter,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
-  },
+  limits: { fileSize: 10 * 1024 * 1024 },
 });
 
-// Helper function to get file URL
-export function getFileUrl(filename: string): string {
-  // In production, this should return a full URL (e.g., from CDN or cloud storage)
-  // For now, return relative path that will be served by static file server
-  const baseUrl = process.env.FILE_BASE_URL || "/uploads/banners";
-  return `${baseUrl}/${filename}`;
+export function getFileUrl(filename: string, fieldname?: string): string {
+  const sub = fieldname ? subdirForField(fieldname) : "banners";
+  const baseUrl = process.env.FILE_BASE_URL || "/uploads";
+  return `${baseUrl}/${sub}/${filename}`;
 }
 
-// Helper function to delete file
-export async function deleteFile(filename: string): Promise<void> {
+export async function deleteFile(filename: string, subdir: string = "banners"): Promise<void> {
   const { unlink } = await import("fs/promises");
-  const filePath = join(UPLOAD_DIR, filename);
+  const filePath = join(BASE_UPLOAD, subdir, filename);
   try {
     await unlink(filePath);
-    logger.info({ filename }, "File deleted successfully");
-  } catch (error: any) {
-    if (error.code !== "ENOENT") {
-      logger.error({ error: error.message, filename }, "Failed to delete file");
-    }
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
 }
 
-export default {
-  upload,
-  getFileUrl,
-  deleteFile,
-  UPLOAD_DIR,
-};
+export const BASE_UPLOAD_DIR = BASE_UPLOAD;
+export default { upload, getFileUrl, deleteFile, UPLOAD_DIR, BASE_UPLOAD_DIR };
