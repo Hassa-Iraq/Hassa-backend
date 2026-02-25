@@ -4,7 +4,9 @@ import * as restaurantController from "../controllers/restaurantController";
 
 const router = express.Router();
 
-router.post("/", authenticate, authorize("restaurant"), restaurantController.createRestaurant);
+router.post("/admin/create", authenticate, authorize("admin"), restaurantController.createRestaurantByAdmin);
+router.post("/admin/onboard", authenticate, authorize("admin"), restaurantController.onboardRestaurantByAdmin);
+router.post("/admin/branches", authenticate, authorize("admin"), restaurantController.createBranchByAdmin);
 router.post("/branches", authenticate, authorize("restaurant"), restaurantController.createBranch);
 router.get("/", authenticate, authorize("restaurant"), restaurantController.listMyRestaurants);
 router.get("/:id", authenticate, authorize("restaurant"), restaurantController.getRestaurant);

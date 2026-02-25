@@ -730,6 +730,171 @@ export const addAdmin = async (req: AuthRequest, res: Response) => {
 };
 
 /**
+ * POST /auth/admin/restaurant-owner
+ * Body: { email, password, phone, full_name? }.
+ */
+export const addRestaurantOwner = async (req: AuthRequest, res: Response) => {
+  try {
+    const { email, password, phone, full_name } = req.body;
+    if (!email || !password || !phone) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Email, password, and phone are required",
+        data: null,
+      });
+    }
+
+    const emailTrimmed = trim(email).toLowerCase();
+    if (!isValidEmail(emailTrimmed)) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Please provide a valid email address",
+        data: null,
+      });
+    }
+    if (!isValidPassword(password)) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Password must be at least 8 characters and contain one uppercase letter, one lowercase letter, and one number",
+        data: null,
+      });
+    }
+
+    const normalizedPhone = trim(String(phone)).startsWith("+")
+      ? trim(String(phone))
+      : "+" + trim(String(phone));
+    if (!validatePhoneFormat(normalizedPhone)) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Invalid phone number. Use E.164 format (e.g. +923001234567)",
+        data: null,
+      });
+    }
+
+    if (await User.existsByEmail(emailTrimmed)) {
+      return res.status(409).json({
+        success: false,
+        status: "ERROR",
+        message: "Email is already registered",
+        data: null,
+      });
+    }
+    if (await User.existsByPhone(normalizedPhone)) {
+      return res.status(409).json({
+        success: false,
+        status: "ERROR",
+        message: "Phone number is already registered",
+        data: null,
+      });
+    }
+
+    const roleRow = await Role.findByName("restaurant");
+    if (!roleRow) {
+      return res.status(500).json({
+        success: false,
+        status: "ERROR",
+        message: "Restaurant role not found",
+        data: null,
+      });
+    }
+
+    const passwordHash = await hashPassword(password);
+    const created = await User.create({
+      email: emailTrimmed,
+      phone: normalizedPhone,
+      full_name: typeof full_name === "string" ? trim(full_name) || null : null,
+      password_hash: passwordHash,
+      role_id: roleRow.id,
+      email_verified: true,
+      phone_verified: true,
+    });
+
+    const userForResponse = { ...created, role_name: "restaurant" } as User.UserRow & { role_name: string };
+    return res.status(201).json({
+      success: true,
+      status: "OK",
+      message: "Restaurant owner created successfully",
+      data: {
+        user: User.toUserResponse(userForResponse, { email_verified: true, phone_verified: true }),
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to create restaurant owner",
+      data: null,
+    });
+  }
+};
+
+/**
+ * DELETE /auth/admin/restaurant-owner/:id
+ * Admin-only helper used by onboarding rollback to remove a newly created restaurant owner.
+ */
+export const deleteRestaurantOwner = async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id;
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "User id is required",
+        data: null,
+      });
+    }
+
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        status: "ERROR",
+        message: "User not found",
+        data: null,
+      });
+    }
+
+    const role = user.role ?? user.role_name ?? "customer";
+    if (role !== "restaurant") {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Only restaurant users can be deleted using this endpoint",
+        data: null,
+      });
+    }
+
+    const deleted = await User.deleteById(id);
+    if (!deleted) {
+      return res.status(404).json({
+        success: false,
+        status: "ERROR",
+        message: "User not found",
+        data: null,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Restaurant owner deleted successfully",
+      data: { user_id: id },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to delete restaurant owner",
+      data: null,
+    });
+  }
+};
+
+/**
  * POST /auth/signup/email/verify-otp
  * Body: { email, otp }
  * Marks email OTP used. Optional: registration only requires phone OTP; use this if you also verify email.

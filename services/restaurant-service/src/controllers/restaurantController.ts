@@ -2,6 +2,7 @@ import { Response } from "express";
 import * as Restaurant from "../models/Restaurant";
 import { AuthRequest } from "../middleware/auth";
 import { cache, cacheKeys } from "../utils/redis";
+import config from "../config/index";
 
 async function ensureOwnership(
   req: AuthRequest,
@@ -84,6 +85,263 @@ export async function createRestaurant(req: AuthRequest, res: Response): Promise
   }
 }
 
+export async function createRestaurantByAdmin(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const body = req.body as Record<string, unknown>;
+    const ownerUserId = body.user_id as string;
+    const name = body.name as string;
+    if (!ownerUserId || typeof ownerUserId !== "string") {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "user_id is required",
+        data: null,
+      });
+      return;
+    }
+    if (!name || typeof name !== "string" || name.trim().length === 0) {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Restaurant name is required",
+        data: null,
+      });
+      return;
+    }
+
+    const created = await Restaurant.create({
+      user_id: ownerUserId,
+      name: name.trim(),
+      parent_id: null,
+      address: (body.address as string) ?? null,
+      zone: (body.zone as string) ?? null,
+      cuisine: (body.cuisine as string) ?? null,
+      logo_url: (body.logo_url as string) ?? null,
+      cover_image_url: (body.cover_image_url as string) ?? null,
+      delivery_time_min: typeof body.delivery_time_min === "number" ? body.delivery_time_min : null,
+      delivery_time_max: typeof body.delivery_time_max === "number" ? body.delivery_time_max : null,
+      tags: Array.isArray(body.tags) ? (body.tags as string[]) : null,
+      tin: (body.tin as string) ?? null,
+      tin_expiry_date: (body.tin_expiry_date as string) ?? null,
+      certificate_url: (body.certificate_url as string) ?? null,
+      additional_data: typeof body.additional_data === "object" && body.additional_data != null ? (body.additional_data as Record<string, unknown>) : null,
+      contact_email: (body.contact_email as string) ?? null,
+      phone: (body.phone as string) ?? null,
+      tax_type: (body.tax_type as string) ?? "exclusive",
+      tax_rate: typeof body.tax_rate === "number" ? body.tax_rate : 0,
+      free_delivery_enabled: Boolean(body.free_delivery_enabled),
+      free_delivery_max_amount: typeof body.free_delivery_max_amount === "number" ? body.free_delivery_max_amount : null,
+      free_delivery_min_distance_km: typeof body.free_delivery_min_distance_km === "number" ? body.free_delivery_min_distance_km : null,
+      description: (body.description as string) ?? null,
+    });
+
+    const activated = await Restaurant.update(created.id, {
+      is_active: true,
+      is_blocked: false,
+      is_open: false,
+    });
+
+    res.status(201).json({
+      success: true,
+      status: "OK",
+      message: "Restaurant onboarded successfully by admin",
+      data: { restaurant: Restaurant.toResponse(activated ?? created) },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to create restaurant",
+      data: null,
+    });
+  }
+}
+
+/**
+ * Admin one-step onboarding:
+ * 1) Create restaurant owner in auth-service
+ * 2) Create restaurant profile in restaurant-service
+ */
+export async function onboardRestaurantByAdmin(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const body = req.body as Record<string, unknown>;
+    const ownerInput = (body.owner as Record<string, unknown>) ?? body;
+    const restaurantInput = (body.restaurant as Record<string, unknown>) ?? body;
+
+    const ownerEmail = ownerInput.email as string;
+    const ownerPassword = ownerInput.password as string;
+    const ownerPhone = ownerInput.phone as string;
+
+    if (!ownerEmail || !ownerPassword || !ownerPhone) {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "owner.email, owner.password, and owner.phone are required",
+        data: null,
+      });
+      return;
+    }
+
+    const restaurantName = restaurantInput.name as string;
+    if (!restaurantName || typeof restaurantName !== "string" || restaurantName.trim().length === 0) {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "restaurant.name is required",
+        data: null,
+      });
+      return;
+    }
+
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      res.status(401).json({
+        success: false,
+        status: "ERROR",
+        message: "Authorization header missing",
+        data: null,
+      });
+      return;
+    }
+
+    const authServiceUrl = config.AUTH_SERVICE_URL || "http://auth-service:3001";
+    const ownerResponse = await fetch(`${authServiceUrl}/auth/admin/restaurant-owner`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: authHeader,
+      },
+      body: JSON.stringify({
+        email: ownerEmail,
+        password: ownerPassword,
+        phone: ownerPhone,
+        full_name: ownerInput.full_name ?? null,
+      }),
+    });
+
+    const ownerData = (await ownerResponse.json().catch(() => ({}))) as {
+      success?: boolean;
+      message?: string;
+      data?: { user?: { id?: string; email?: string; phone?: string; full_name?: string } };
+    };
+
+    if (!ownerResponse.ok || !ownerData.success || !ownerData.data?.user?.id) {
+      res.status(ownerResponse.status || 400).json({
+        success: false,
+        status: "ERROR",
+        message: ownerData.message || "Failed to create restaurant owner",
+        data: ownerData.data ?? null,
+      });
+      return;
+    }
+
+    const ownerUserId = ownerData.data.user.id;
+
+    try {
+      const created = await Restaurant.create({
+        user_id: ownerUserId,
+        name: restaurantName.trim(),
+        parent_id: null,
+        address: (restaurantInput.address as string) ?? null,
+        zone: (restaurantInput.zone as string) ?? null,
+        cuisine: (restaurantInput.cuisine as string) ?? null,
+        logo_url: (restaurantInput.logo_url as string) ?? null,
+        cover_image_url: (restaurantInput.cover_image_url as string) ?? null,
+        delivery_time_min:
+          typeof restaurantInput.delivery_time_min === "number" ? restaurantInput.delivery_time_min : null,
+        delivery_time_max:
+          typeof restaurantInput.delivery_time_max === "number" ? restaurantInput.delivery_time_max : null,
+        tags: Array.isArray(restaurantInput.tags) ? (restaurantInput.tags as string[]) : null,
+        tin: (restaurantInput.tin as string) ?? null,
+        tin_expiry_date: (restaurantInput.tin_expiry_date as string) ?? null,
+        certificate_url: (restaurantInput.certificate_url as string) ?? null,
+        additional_data:
+          typeof restaurantInput.additional_data === "object" && restaurantInput.additional_data != null
+            ? (restaurantInput.additional_data as Record<string, unknown>)
+            : null,
+        contact_email: (restaurantInput.contact_email as string) ?? null,
+        phone: (restaurantInput.phone as string) ?? null,
+        tax_type: (restaurantInput.tax_type as string) ?? "exclusive",
+        tax_rate: typeof restaurantInput.tax_rate === "number" ? restaurantInput.tax_rate : 0,
+        free_delivery_enabled: Boolean(restaurantInput.free_delivery_enabled),
+        free_delivery_max_amount:
+          typeof restaurantInput.free_delivery_max_amount === "number"
+            ? restaurantInput.free_delivery_max_amount
+            : null,
+        free_delivery_min_distance_km:
+          typeof restaurantInput.free_delivery_min_distance_km === "number"
+            ? restaurantInput.free_delivery_min_distance_km
+            : null,
+        description: (restaurantInput.description as string) ?? null,
+      });
+
+      const activated = await Restaurant.update(created.id, {
+        is_active: true,
+        is_blocked: false,
+        is_open: false,
+      });
+
+      res.status(201).json({
+        success: true,
+        status: "OK",
+        message: "Restaurant owner + restaurant onboarded successfully",
+        data: {
+          owner: ownerData.data.user,
+          restaurant: Restaurant.toResponse(activated ?? created),
+        },
+      });
+    } catch (err) {
+      let rollbackAttempted = false;
+      let rollbackSucceeded = false;
+      let rollbackError: string | null = null;
+
+      try {
+        rollbackAttempted = true;
+        const rollbackResponse = await fetch(
+          `${authServiceUrl}/auth/admin/restaurant-owner/${ownerUserId}`,
+          {
+            method: "DELETE",
+            headers: {
+              Authorization: authHeader,
+            },
+          }
+        );
+        rollbackSucceeded = rollbackResponse.ok;
+        if (!rollbackResponse.ok) {
+          const rollbackData = (await rollbackResponse.json().catch(() => ({}))) as { message?: string };
+          rollbackError = rollbackData.message ?? `Rollback failed with status ${rollbackResponse.status}`;
+        }
+      } catch (rollbackErr) {
+        rollbackError =
+          rollbackErr instanceof Error ? rollbackErr.message : "Rollback call failed";
+      }
+
+      res.status(500).json({
+        success: false,
+        status: "ERROR",
+        message:
+          err instanceof Error
+            ? `Owner created but restaurant creation failed ${err.message}`
+            : "Owner created but restaurant creation failed",
+        data: {
+          owner: ownerData.data.user,
+          created_owner_user_id: ownerUserId,
+          rollback_attempted: rollbackAttempted,
+          rollback_succeeded: rollbackSucceeded,
+          rollback_error: rollbackError,
+        },
+      });
+    }
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to onboard restaurant",
+      data: null,
+    });
+  }
+}
+
 export async function createBranch(req: AuthRequest, res: Response): Promise<void> {
   try {
     const parentId = req.body.parent_id ?? req.body.parent_restaurant_id;
@@ -130,6 +388,80 @@ export async function createBranch(req: AuthRequest, res: Response): Promise<voi
       status: "OK",
       message: "Branch created successfully",
       data: { restaurant: Restaurant.toResponse(row) },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to create branch",
+      data: null,
+    });
+  }
+}
+
+export async function createBranchByAdmin(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const parentId = req.body.parent_id ?? req.body.parent_restaurant_id;
+    if (!parentId || typeof parentId !== "string") {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "parent_id (or parent_restaurant_id) is required",
+        data: null,
+      });
+      return;
+    }
+
+    const parent = await Restaurant.findById(parentId);
+    if (!parent) {
+      res.status(404).json({
+        success: false,
+        status: "ERROR",
+        message: "Parent restaurant not found",
+        data: null,
+      });
+      return;
+    }
+
+    const body = req.body as Record<string, unknown>;
+    const name = (body.name as string) ?? `${parent.name} (Branch)`;
+    const row = await Restaurant.create({
+      user_id: parent.user_id,
+      parent_id: parentId,
+      name: typeof name === "string" ? name.trim() : name,
+      address: (body.address as string) ?? null,
+      zone: (body.zone as string) ?? null,
+      cuisine: (body.cuisine as string) ?? null,
+      logo_url: (body.logo_url as string) ?? null,
+      cover_image_url: (body.cover_image_url as string) ?? null,
+      delivery_time_min: typeof body.delivery_time_min === "number" ? body.delivery_time_min : null,
+      delivery_time_max: typeof body.delivery_time_max === "number" ? body.delivery_time_max : null,
+      tags: Array.isArray(body.tags) ? (body.tags as string[]) : null,
+      tin: (body.tin as string) ?? null,
+      tin_expiry_date: (body.tin_expiry_date as string) ?? null,
+      certificate_url: (body.certificate_url as string) ?? null,
+      additional_data: typeof body.additional_data === "object" && body.additional_data != null ? (body.additional_data as Record<string, unknown>) : null,
+      contact_email: (body.contact_email as string) ?? null,
+      phone: (body.phone as string) ?? null,
+      tax_type: (body.tax_type as string) ?? "exclusive",
+      tax_rate: typeof body.tax_rate === "number" ? body.tax_rate : 0,
+      free_delivery_enabled: Boolean(body.free_delivery_enabled),
+      free_delivery_max_amount: typeof body.free_delivery_max_amount === "number" ? body.free_delivery_max_amount : null,
+      free_delivery_min_distance_km: typeof body.free_delivery_min_distance_km === "number" ? body.free_delivery_min_distance_km : null,
+      description: (body.description as string) ?? null,
+    });
+
+    const activated = await Restaurant.update(row.id, {
+      is_active: true,
+      is_blocked: false,
+      is_open: false,
+    });
+
+    res.status(201).json({
+      success: true,
+      status: "OK",
+      message: "Branch created successfully by admin",
+      data: { restaurant: Restaurant.toResponse(activated ?? row) },
     });
   } catch (err) {
     res.status(500).json({
