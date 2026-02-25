@@ -12,6 +12,18 @@ router.get("/me", authenticate, authController.me);
 router.patch("/profile", authenticate, authController.updateProfile);
 
 router.post("/admin", authenticate, authorize("admin"), authController.addAdmin);
+router.post(
+  "/admin/restaurant-owner",
+  authenticate,
+  authorize("admin"),
+  authController.addRestaurantOwner
+);
+router.delete(
+  "/admin/restaurant-owner/:id",
+  authenticate,
+  authorize("admin"),
+  authController.deleteRestaurantOwner
+);
 
 router.post("/signup/request-otp", authController.signupRequestOtp);
 router.post("/signup/email/verify-otp", authController.signupEmailVerifyOtp);

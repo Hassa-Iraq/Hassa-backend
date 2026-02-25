@@ -149,6 +149,7 @@ export async function existsByPhone(phone: string): Promise<boolean> {
 export async function create(params: {
   email: string;
   phone?: string | null;
+  full_name?: string | null;
   password_hash: string;
   role_id: string;
   email_verified?: boolean;
@@ -157,13 +158,14 @@ export async function create(params: {
   const emailVerified = params.email_verified ?? false;
   const phoneVerified = params.phone_verified ?? false;
   const result = await pool.query<UserRow>(
-    `INSERT INTO auth.users (email, phone, password_hash, role_id, email_verified, phone_verified)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO auth.users (email, phone, full_name, password_hash, role_id, email_verified, phone_verified)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING id, email, phone, password_hash, role_id, email_verified, phone_verified,
        full_name, date_of_birth, bio, profile_picture_url, created_at, updated_at`,
     [
       params.email,
       params.phone ?? null,
+      params.full_name ?? null,
       params.password_hash,
       params.role_id,
       emailVerified,
@@ -264,6 +266,11 @@ export async function setEmailVerified(userId: string, verified: boolean): Promi
   );
 }
 
+export async function deleteById(userId: string): Promise<boolean> {
+  const result = await pool.query("DELETE FROM auth.users WHERE id = $1", [userId]);
+  return (result.rowCount ?? 0) > 0;
+}
+
 export default {
   USER_SELECT,
   toUserResponse,
@@ -280,4 +287,5 @@ export default {
   updateProfile,
   setPhoneVerified,
   setEmailVerified,
+  deleteById,
 };
