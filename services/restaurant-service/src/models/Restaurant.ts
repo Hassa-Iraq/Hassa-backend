@@ -94,6 +94,19 @@ export interface UpdateRestaurantParams {
   is_blocked?: boolean;
 }
 
+export interface AdminRestaurantListFilters {
+  limit: number;
+  offset: number;
+  search?: string;
+  zone?: string;
+  cuisine?: string;
+  status?: "active" | "inactive" | "blocked" | "open" | "closed";
+}
+
+export interface AdminRestaurantRow extends RestaurantRow {
+  branches_count: number;
+}
+
 export async function create(params: CreateRestaurantParams): Promise<RestaurantRow> {
   const r = await pool.query(
     `INSERT INTO restaurant.restaurants (
@@ -171,6 +184,123 @@ export async function findBranches(parent_id: string): Promise<RestaurantRow[]> 
     [parent_id]
   );
   return r.rows;
+}
+
+export async function findBranchesByParentIdForAdmin(
+  parent_id: string,
+  opts?: { limit?: number; offset?: number }
+): Promise<RestaurantRow[]> {
+  const limit = opts?.limit ?? 20;
+  const offset = opts?.offset ?? 0;
+  const r = await pool.query(
+    `SELECT * FROM restaurant.restaurants
+     WHERE parent_id = $1
+     ORDER BY created_at DESC
+     LIMIT $2 OFFSET $3`,
+    [parent_id, limit, offset]
+  );
+  return r.rows;
+}
+
+export async function countBranchesByParentId(parent_id: string): Promise<number> {
+  const r = await pool.query(
+    "SELECT COUNT(*)::int AS total FROM restaurant.restaurants WHERE parent_id = $1",
+    [parent_id]
+  );
+  return r.rows[0]?.total ?? 0;
+}
+
+export async function findAllForAdmin(filters: AdminRestaurantListFilters): Promise<AdminRestaurantRow[]> {
+  const conditions: string[] = ["r.parent_id IS NULL"];
+  const values: unknown[] = [];
+  let i = 1;
+
+  if (filters.search) {
+    conditions.push(`(r.name ILIKE $${i} OR r.address ILIKE $${i} OR r.contact_email ILIKE $${i})`);
+    values.push(`%${filters.search}%`);
+    i += 1;
+  }
+  if (filters.zone) {
+    conditions.push(`r.zone ILIKE $${i}`);
+    values.push(`%${filters.zone}%`);
+    i += 1;
+  }
+  if (filters.cuisine) {
+    conditions.push(`r.cuisine ILIKE $${i}`);
+    values.push(`%${filters.cuisine}%`);
+    i += 1;
+  }
+  if (filters.status) {
+    if (filters.status === "active") conditions.push("r.is_active = true AND r.is_blocked = false");
+    if (filters.status === "inactive") conditions.push("r.is_active = false AND r.is_blocked = false");
+    if (filters.status === "blocked") conditions.push("r.is_blocked = true");
+    if (filters.status === "open") conditions.push("r.is_open = true AND r.is_blocked = false");
+    if (filters.status === "closed") conditions.push("r.is_open = false AND r.is_blocked = false");
+  }
+
+  values.push(filters.limit);
+  const limitPlaceholder = `$${i++}`;
+  values.push(filters.offset);
+  const offsetPlaceholder = `$${i++}`;
+
+  const r = await pool.query(
+    `SELECT
+       r.*,
+       (
+         SELECT COUNT(*)::int
+         FROM restaurant.restaurants b
+         WHERE b.parent_id = r.id
+       ) AS branches_count
+     FROM restaurant.restaurants r
+     WHERE ${conditions.join(" AND ")}
+     ORDER BY r.created_at DESC
+     LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,
+    values
+  );
+
+  return r.rows.map((row) => ({
+    ...row,
+    branches_count: Number(row.branches_count ?? 0),
+  }));
+}
+
+export async function countAllForAdmin(
+  filters: Omit<AdminRestaurantListFilters, "limit" | "offset">
+): Promise<number> {
+  const conditions: string[] = ["parent_id IS NULL"];
+  const values: unknown[] = [];
+  let i = 1;
+
+  if (filters.search) {
+    conditions.push(`(name ILIKE $${i} OR address ILIKE $${i} OR contact_email ILIKE $${i})`);
+    values.push(`%${filters.search}%`);
+    i += 1;
+  }
+  if (filters.zone) {
+    conditions.push(`zone ILIKE $${i}`);
+    values.push(`%${filters.zone}%`);
+    i += 1;
+  }
+  if (filters.cuisine) {
+    conditions.push(`cuisine ILIKE $${i}`);
+    values.push(`%${filters.cuisine}%`);
+    i += 1;
+  }
+  if (filters.status) {
+    if (filters.status === "active") conditions.push("is_active = true AND is_blocked = false");
+    if (filters.status === "inactive") conditions.push("is_active = false AND is_blocked = false");
+    if (filters.status === "blocked") conditions.push("is_blocked = true");
+    if (filters.status === "open") conditions.push("is_open = true AND is_blocked = false");
+    if (filters.status === "closed") conditions.push("is_open = false AND is_blocked = false");
+  }
+
+  const r = await pool.query(
+    `SELECT COUNT(*)::int AS total
+     FROM restaurant.restaurants
+     WHERE ${conditions.join(" AND ")}`,
+    values
+  );
+  return r.rows[0]?.total ?? 0;
 }
 
 export async function listPublic(opts: {

@@ -8,6 +8,8 @@ const router = express.Router();
 router.post("/admin/create", authenticate, authorize("admin"), restaurantController.createRestaurantByAdmin);
 router.post("/admin/onboard", authenticate, authorize("admin"), restaurantController.onboardRestaurantByAdmin);
 router.post("/admin/branches", authenticate, authorize("admin"), restaurantController.createBranchByAdmin);
+router.get("/admin/restaurants", authenticate, authorize("admin"), restaurantController.listRestaurantsForAdmin);
+router.get("/admin/restaurants/:id/branches", authenticate, authorize("admin"), restaurantController.listBranchesForAdmin);
 router.post(
   "/uploads/restaurant-assets",
   authenticate,
@@ -27,9 +29,9 @@ router.post(
   restaurantController.uploadBannerImage
 );
 router.post("/branches", authenticate, authorize("restaurant"), restaurantController.createBranch);
-router.get("/", authenticate, authorize("restaurant"), restaurantController.listMyRestaurants);
-router.get("/:id", authenticate, authorize("restaurant"), restaurantController.getRestaurant);
-router.put("/:id", authenticate, authorize("restaurant"), restaurantController.updateRestaurant);
+router.get("/", authenticate, authorize("admin", "restaurant"), restaurantController.listMyRestaurants);
+router.get("/:id", authenticate, authorize("admin", "restaurant"), restaurantController.getRestaurant);
+router.put("/:id", authenticate, authorize("admin", "restaurant"), restaurantController.updateRestaurant);
 router.patch("/:id/approve", authenticate, authorize("admin"), restaurantController.approveRestaurant);
 router.patch("/:id/block", authenticate, authorize("admin"), restaurantController.blockRestaurant);
 router.patch("/:id/unblock", authenticate, authorize("admin"), restaurantController.unblockRestaurant);

@@ -8,7 +8,8 @@ import { getFileUrl } from "../utils/fileUpload";
 async function ensureOwnership(
   req: AuthRequest,
   res: Response,
-  restaurantId: string
+  restaurantId: string,
+  opts?: { allowAdmin?: boolean }
 ): Promise<Restaurant.RestaurantRow | null> {
   const row = await Restaurant.findById(restaurantId);
   if (!row) {
@@ -20,7 +21,9 @@ async function ensureOwnership(
     });
     return null;
   }
-  if (req.user!.id !== row.user_id) {
+  const allowAdmin = opts?.allowAdmin === true;
+  const isAdmin = req.user?.role === "admin";
+  if (req.user!.id !== row.user_id && !(allowAdmin && isAdmin)) {
     res.status(403).json({
       success: false,
       status: "ERROR",
@@ -579,6 +582,10 @@ export async function createBranchByAdmin(req: AuthRequest, res: Response): Prom
 
 export async function listMyRestaurants(req: AuthRequest, res: Response): Promise<void> {
   try {
+    if (req.user?.role === "admin") {
+      await listRestaurantsForAdmin(req, res);
+      return;
+    }
     const page = Math.max(1, parseInt(String(req.query.page)) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit)) || 20));
     const offset = (page - 1) * limit;
@@ -619,10 +626,115 @@ export async function listMyRestaurants(req: AuthRequest, res: Response): Promis
   }
 }
 
+export async function listRestaurantsForAdmin(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const page = Math.max(1, parseInt(String(req.query.page)) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit)) || 20));
+    const offset = (page - 1) * limit;
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : undefined;
+    const zone = typeof req.query.zone === "string" ? req.query.zone.trim() : undefined;
+    const cuisine = typeof req.query.cuisine === "string" ? req.query.cuisine.trim() : undefined;
+
+    const rawStatus = typeof req.query.status === "string" ? req.query.status.trim().toLowerCase() : undefined;
+    const allowedStatuses = new Set(["active", "inactive", "blocked", "open", "closed"]);
+    const status = rawStatus && allowedStatuses.has(rawStatus)
+      ? (rawStatus as "active" | "inactive" | "blocked" | "open" | "closed")
+      : undefined;
+
+    const rows = await Restaurant.findAllForAdmin({ limit, offset, search, zone, cuisine, status });
+    const total = await Restaurant.countAllForAdmin({ search, zone, cuisine, status });
+
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Restaurants listed for admin",
+      data: {
+        restaurants: rows.map((row) => ({
+          ...Restaurant.toResponse(row),
+          branches_count: row.branches_count,
+        })),
+        filters: {
+          search: search ?? null,
+          zone: zone ?? null,
+          cuisine: cuisine ?? null,
+          status: status ?? null,
+        },
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to list restaurants",
+      data: null,
+    });
+  }
+}
+
+export async function listBranchesForAdmin(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const parentId = req.params.id as string;
+    const parent = await Restaurant.findById(parentId);
+    if (!parent) {
+      res.status(404).json({
+        success: false,
+        status: "ERROR",
+        message: "Parent restaurant not found",
+        data: null,
+      });
+      return;
+    }
+    if (parent.parent_id !== null) {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Provided id belongs to a branch. Use a parent restaurant id.",
+        data: null,
+      });
+      return;
+    }
+
+    const page = Math.max(1, parseInt(String(req.query.page)) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit)) || 20));
+    const offset = (page - 1) * limit;
+    const rows = await Restaurant.findBranchesByParentIdForAdmin(parentId, { limit, offset });
+    const total = await Restaurant.countBranchesByParentId(parentId);
+
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Branches listed for admin",
+      data: {
+        parent_restaurant: Restaurant.toResponse(parent),
+        branches: rows.map(Restaurant.toResponse),
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to list branches",
+      data: null,
+    });
+  }
+}
+
 export async function getRestaurant(req: AuthRequest, res: Response): Promise<void> {
   try {
     const id = req.params.id as string;
-    const row = await ensureOwnership(req, res, id);
+    const row = await ensureOwnership(req, res, id, { allowAdmin: true });
     if (!row) return;
     const branches = row.parent_id == null ? await Restaurant.findBranches(row.id) : [];
     res.status(200).json({
@@ -647,7 +759,7 @@ export async function getRestaurant(req: AuthRequest, res: Response): Promise<vo
 export async function updateRestaurant(req: AuthRequest, res: Response): Promise<void> {
   try {
     const id = req.params.id as string;
-    const row = await ensureOwnership(req, res, id);
+    const row = await ensureOwnership(req, res, id, { allowAdmin: true });
     if (!row) return;
     const body = req.body as Record<string, unknown>;
     const params: Restaurant.UpdateRestaurantParams = {};
