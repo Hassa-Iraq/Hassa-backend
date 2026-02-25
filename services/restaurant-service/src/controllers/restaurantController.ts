@@ -3,6 +3,7 @@ import * as Restaurant from "../models/Restaurant";
 import { AuthRequest } from "../middleware/auth";
 import { cache, cacheKeys } from "../utils/redis";
 import config from "../config/index";
+import { getFileUrl } from "../utils/fileUpload";
 
 async function ensureOwnership(
   req: AuthRequest,
@@ -31,6 +32,73 @@ async function ensureOwnership(
   return row;
 }
 
+export async function uploadRestaurantAssets(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const files = (req.files as Record<string, Express.Multer.File[]> | undefined) ?? {};
+    const logo = files.logo?.[0];
+    const cover = files.cover_image?.[0];
+    const certificate = files.certificate?.[0];
+
+    if (!logo && !cover && !certificate) {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Upload at least one file: logo, cover_image, or certificate",
+        data: null,
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Assets uploaded successfully",
+      data: {
+        logo_url: logo ? getFileUrl(logo.filename, logo.fieldname) : null,
+        cover_image_url: cover ? getFileUrl(cover.filename, cover.fieldname) : null,
+        certificate_url: certificate ? getFileUrl(certificate.filename, certificate.fieldname) : null,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to upload assets",
+      data: null,
+    });
+  }
+}
+
+export async function uploadBannerImage(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "banner_image file is required",
+        data: null,
+      });
+      return;
+    }
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Banner image uploaded successfully",
+      data: {
+        banner_image_url: getFileUrl(file.filename, file.fieldname),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to upload banner image",
+      data: null,
+    });
+  }
+}
+
 export async function createRestaurant(req: AuthRequest, res: Response): Promise<void> {
   try {
     const body = req.body as Record<string, unknown>;
@@ -50,6 +118,12 @@ export async function createRestaurant(req: AuthRequest, res: Response): Promise
       parent_id: null,
       address: (body.address as string) ?? null,
       zone: (body.zone as string) ?? null,
+      latitude: typeof body.lat === "number" ? body.lat : (typeof body.latitude === "number" ? body.latitude : null),
+      longitude: typeof body.lng === "number" ? body.lng : (typeof body.longitude === "number" ? body.longitude : null),
+      service_radius_km:
+        typeof body.radius_km === "number"
+          ? body.radius_km
+          : (typeof body.service_radius_km === "number" ? body.service_radius_km : null),
       cuisine: (body.cuisine as string) ?? null,
       logo_url: (body.logo_url as string) ?? null,
       cover_image_url: (body.cover_image_url as string) ?? null,
@@ -115,6 +189,12 @@ export async function createRestaurantByAdmin(req: AuthRequest, res: Response): 
       parent_id: null,
       address: (body.address as string) ?? null,
       zone: (body.zone as string) ?? null,
+      latitude: typeof body.lat === "number" ? body.lat : (typeof body.latitude === "number" ? body.latitude : null),
+      longitude: typeof body.lng === "number" ? body.lng : (typeof body.longitude === "number" ? body.longitude : null),
+      service_radius_km:
+        typeof body.radius_km === "number"
+          ? body.radius_km
+          : (typeof body.service_radius_km === "number" ? body.service_radius_km : null),
       cuisine: (body.cuisine as string) ?? null,
       logo_url: (body.logo_url as string) ?? null,
       cover_image_url: (body.cover_image_url as string) ?? null,
@@ -244,6 +324,18 @@ export async function onboardRestaurantByAdmin(req: AuthRequest, res: Response):
         parent_id: null,
         address: (restaurantInput.address as string) ?? null,
         zone: (restaurantInput.zone as string) ?? null,
+        latitude:
+          typeof restaurantInput.lat === "number"
+            ? restaurantInput.lat
+            : (typeof restaurantInput.latitude === "number" ? restaurantInput.latitude : null),
+        longitude:
+          typeof restaurantInput.lng === "number"
+            ? restaurantInput.lng
+            : (typeof restaurantInput.longitude === "number" ? restaurantInput.longitude : null),
+        service_radius_km:
+          typeof restaurantInput.radius_km === "number"
+            ? restaurantInput.radius_km
+            : (typeof restaurantInput.service_radius_km === "number" ? restaurantInput.service_radius_km : null),
         cuisine: (restaurantInput.cuisine as string) ?? null,
         logo_url: (restaurantInput.logo_url as string) ?? null,
         cover_image_url: (restaurantInput.cover_image_url as string) ?? null,
@@ -364,6 +456,12 @@ export async function createBranch(req: AuthRequest, res: Response): Promise<voi
       name: typeof name === "string" ? name.trim() : name,
       address: (body.address as string) ?? null,
       zone: (body.zone as string) ?? null,
+      latitude: typeof body.lat === "number" ? body.lat : (typeof body.latitude === "number" ? body.latitude : null),
+      longitude: typeof body.lng === "number" ? body.lng : (typeof body.longitude === "number" ? body.longitude : null),
+      service_radius_km:
+        typeof body.radius_km === "number"
+          ? body.radius_km
+          : (typeof body.service_radius_km === "number" ? body.service_radius_km : null),
       cuisine: (body.cuisine as string) ?? null,
       logo_url: (body.logo_url as string) ?? null,
       cover_image_url: (body.cover_image_url as string) ?? null,
@@ -431,6 +529,12 @@ export async function createBranchByAdmin(req: AuthRequest, res: Response): Prom
       name: typeof name === "string" ? name.trim() : name,
       address: (body.address as string) ?? null,
       zone: (body.zone as string) ?? null,
+      latitude: typeof body.lat === "number" ? body.lat : (typeof body.latitude === "number" ? body.latitude : null),
+      longitude: typeof body.lng === "number" ? body.lng : (typeof body.longitude === "number" ? body.longitude : null),
+      service_radius_km:
+        typeof body.radius_km === "number"
+          ? body.radius_km
+          : (typeof body.service_radius_km === "number" ? body.service_radius_km : null),
       cuisine: (body.cuisine as string) ?? null,
       logo_url: (body.logo_url as string) ?? null,
       cover_image_url: (body.cover_image_url as string) ?? null,
@@ -550,6 +654,18 @@ export async function updateRestaurant(req: AuthRequest, res: Response): Promise
     if (body.name !== undefined) params.name = String(body.name);
     if (body.address !== undefined) params.address = body.address == null ? null : String(body.address);
     if (body.zone !== undefined) params.zone = body.zone == null ? null : String(body.zone);
+    if (body.lat !== undefined || body.latitude !== undefined) {
+      const val = body.lat !== undefined ? body.lat : body.latitude;
+      params.latitude = typeof val === "number" ? val : null;
+    }
+    if (body.lng !== undefined || body.longitude !== undefined) {
+      const val = body.lng !== undefined ? body.lng : body.longitude;
+      params.longitude = typeof val === "number" ? val : null;
+    }
+    if (body.radius_km !== undefined || body.service_radius_km !== undefined) {
+      const val = body.radius_km !== undefined ? body.radius_km : body.service_radius_km;
+      params.service_radius_km = typeof val === "number" ? val : null;
+    }
     if (body.cuisine !== undefined) params.cuisine = body.cuisine == null ? null : String(body.cuisine);
     if (body.logo_url !== undefined) params.logo_url = body.logo_url == null ? null : String(body.logo_url);
     if (body.cover_image_url !== undefined) params.cover_image_url = body.cover_image_url == null ? null : String(body.cover_image_url);

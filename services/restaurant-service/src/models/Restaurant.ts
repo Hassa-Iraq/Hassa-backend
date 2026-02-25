@@ -7,6 +7,9 @@ export interface RestaurantRow {
   name: string;
   address: string | null;
   zone: string | null;
+  latitude: string | null;
+  longitude: string | null;
+  service_radius_km: string | null;
   cuisine: string | null;
   logo_url: string | null;
   cover_image_url: string | null;
@@ -38,6 +41,9 @@ export interface CreateRestaurantParams {
   name: string;
   address?: string | null;
   zone?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  service_radius_km?: number | null;
   cuisine?: string | null;
   logo_url?: string | null;
   cover_image_url?: string | null;
@@ -62,6 +68,9 @@ export interface UpdateRestaurantParams {
   name?: string;
   address?: string | null;
   zone?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  service_radius_km?: number | null;
   cuisine?: string | null;
   logo_url?: string | null;
   cover_image_url?: string | null;
@@ -88,12 +97,12 @@ export interface UpdateRestaurantParams {
 export async function create(params: CreateRestaurantParams): Promise<RestaurantRow> {
   const r = await pool.query(
     `INSERT INTO restaurant.restaurants (
-      user_id, parent_id, name, address, zone, cuisine, logo_url, cover_image_url,
+      user_id, parent_id, name, address, zone, latitude, longitude, service_radius_km, cuisine, logo_url, cover_image_url,
       delivery_time_min, delivery_time_max, tags, tin, tin_expiry_date, certificate_url,
       additional_data, contact_email, phone, tax_type, tax_rate,
       free_delivery_enabled, free_delivery_max_amount, free_delivery_min_distance_km,
       description, is_active, is_open, is_blocked
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
     RETURNING *`,
     [
       params.user_id,
@@ -101,6 +110,9 @@ export async function create(params: CreateRestaurantParams): Promise<Restaurant
       params.name,
       params.address ?? null,
       params.zone ?? null,
+      params.latitude ?? null,
+      params.longitude ?? null,
+      params.service_radius_km ?? null,
       params.cuisine ?? null,
       params.logo_url ?? null,
       params.cover_image_url ?? null,
@@ -184,7 +196,7 @@ export async function countPublic(): Promise<number> {
 
 export async function update(id: string, params: UpdateRestaurantParams): Promise<RestaurantRow | null> {
   const allowed: (keyof UpdateRestaurantParams)[] = [
-    "name", "address", "zone", "cuisine", "logo_url", "cover_image_url",
+    "name", "address", "zone", "latitude", "longitude", "service_radius_km", "cuisine", "logo_url", "cover_image_url",
     "delivery_time_min", "delivery_time_max", "tags", "tin", "tin_expiry_date",
     "certificate_url", "additional_data", "contact_email", "phone", "tax_type", "tax_rate",
     "free_delivery_enabled", "free_delivery_max_amount", "free_delivery_min_distance_km",
@@ -224,6 +236,12 @@ export function toResponse(row: RestaurantRow): Record<string, unknown> {
     name: row.name,
     address: row.address,
     zone: row.zone,
+    lat: row.latitude != null ? parseFloat(String(row.latitude)) : null,
+    lng: row.longitude != null ? parseFloat(String(row.longitude)) : null,
+    radius_km: row.service_radius_km != null ? parseFloat(String(row.service_radius_km)) : null,
+    latitude: row.latitude != null ? parseFloat(String(row.latitude)) : null,
+    longitude: row.longitude != null ? parseFloat(String(row.longitude)) : null,
+    service_radius_km: row.service_radius_km != null ? parseFloat(String(row.service_radius_km)) : null,
     cuisine: row.cuisine,
     logo_url: row.logo_url,
     cover_image_url: row.cover_image_url,
