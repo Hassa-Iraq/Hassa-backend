@@ -97,6 +97,7 @@ export interface UpdateRestaurantParams {
 export interface AdminRestaurantListFilters {
   limit: number;
   offset: number;
+  user_id?: string;
   search?: string;
   zone?: string;
   cuisine?: string;
@@ -226,6 +227,11 @@ export async function findAllForAdmin(filters: AdminRestaurantListFilters): Prom
   const values: unknown[] = [];
   let i = 1;
 
+  if (filters.user_id) {
+    conditions.push(`r.user_id = $${i}`);
+    values.push(filters.user_id);
+    i += 1;
+  }
   if (filters.search) {
     conditions.push(`(r.name ILIKE $${i} OR r.address ILIKE $${i} OR r.contact_email ILIKE $${i})`);
     values.push(`%${filters.search}%`);
@@ -290,6 +296,12 @@ export async function countAllForAdmin(
   const conditions: string[] = ["parent_id IS NULL"];
   const values: unknown[] = [];
   let i = 1;
+
+  if (filters.user_id) {
+    conditions.push(`user_id = $${i}`);
+    values.push(filters.user_id);
+    i += 1;
+  }
 
   if (filters.search) {
     conditions.push(`(name ILIKE $${i} OR address ILIKE $${i} OR contact_email ILIKE $${i})`);
