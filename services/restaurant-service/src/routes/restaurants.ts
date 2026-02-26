@@ -8,6 +8,7 @@ const router = express.Router();
 router.post("/admin/create", authenticate, authorize("admin"), restaurantController.createRestaurantByAdmin);
 router.post("/admin/onboard", authenticate, authorize("admin"), restaurantController.onboardRestaurantByAdmin);
 router.post("/admin/branches", authenticate, authorize("admin"), restaurantController.createBranchByAdmin);
+router.get("/admin/restaurants/stats", authenticate, authorize("admin"), restaurantController.getRestaurantDashboardStats);
 router.get("/admin/restaurants", authenticate, authorize("admin"), restaurantController.listRestaurantsForAdmin);
 router.get("/admin/restaurants/:id/branches", authenticate, authorize("admin"), restaurantController.listBranchesForAdmin);
 router.post(

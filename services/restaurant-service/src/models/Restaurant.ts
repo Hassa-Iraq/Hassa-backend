@@ -100,11 +100,22 @@ export interface AdminRestaurantListFilters {
   search?: string;
   zone?: string;
   cuisine?: string;
+  radius_km?: number;
   status?: "active" | "inactive" | "blocked" | "open" | "closed";
 }
 
 export interface AdminRestaurantRow extends RestaurantRow {
   branches_count: number;
+  owner_name: string | null;
+  owner_phone: string | null;
+  owner_email: string | null;
+}
+
+export interface AdminRestaurantStatsRow {
+  total_restaurants: number;
+  active_restaurants: number;
+  inactive_restaurants: number;
+  newly_joined_restaurants: number;
 }
 
 export async function create(params: CreateRestaurantParams): Promise<RestaurantRow> {
@@ -230,6 +241,11 @@ export async function findAllForAdmin(filters: AdminRestaurantListFilters): Prom
     values.push(`%${filters.cuisine}%`);
     i += 1;
   }
+  if (typeof filters.radius_km === "number" && Number.isFinite(filters.radius_km)) {
+    conditions.push(`r.service_radius_km IS NOT NULL AND r.service_radius_km <= $${i}`);
+    values.push(filters.radius_km);
+    i += 1;
+  }
   if (filters.status) {
     if (filters.status === "active") conditions.push("r.is_active = true AND r.is_blocked = false");
     if (filters.status === "inactive") conditions.push("r.is_active = false AND r.is_blocked = false");
@@ -246,12 +262,16 @@ export async function findAllForAdmin(filters: AdminRestaurantListFilters): Prom
   const r = await pool.query(
     `SELECT
        r.*,
+       u.full_name AS owner_name,
+       u.phone AS owner_phone,
+       u.email AS owner_email,
        (
          SELECT COUNT(*)::int
          FROM restaurant.restaurants b
          WHERE b.parent_id = r.id
        ) AS branches_count
      FROM restaurant.restaurants r
+     LEFT JOIN auth.users u ON u.id = r.user_id
      WHERE ${conditions.join(" AND ")}
      ORDER BY r.created_at DESC
      LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,
@@ -286,6 +306,11 @@ export async function countAllForAdmin(
     values.push(`%${filters.cuisine}%`);
     i += 1;
   }
+  if (typeof filters.radius_km === "number" && Number.isFinite(filters.radius_km)) {
+    conditions.push(`service_radius_km IS NOT NULL AND service_radius_km <= $${i}`);
+    values.push(filters.radius_km);
+    i += 1;
+  }
   if (filters.status) {
     if (filters.status === "active") conditions.push("is_active = true AND is_blocked = false");
     if (filters.status === "inactive") conditions.push("is_active = false AND is_blocked = false");
@@ -301,6 +326,20 @@ export async function countAllForAdmin(
     values
   );
   return r.rows[0]?.total ?? 0;
+}
+
+export async function getAdminRestaurantStats(): Promise<AdminRestaurantStatsRow> {
+  const r = await pool.query(
+    `SELECT
+       COUNT(*)::int AS total_restaurants,
+       COUNT(*) FILTER (WHERE is_active = true AND is_blocked = false)::int AS active_restaurants,
+       COUNT(*) FILTER (WHERE is_active = false AND is_blocked = false)::int AS inactive_restaurants,
+       COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days')::int AS newly_joined_restaurants
+     FROM restaurant.restaurants
+     WHERE parent_id IS NULL`
+  );
+
+  return r.rows[0] as AdminRestaurantStatsRow;
 }
 
 export async function listPublic(opts: {

@@ -634,6 +634,10 @@ export async function listRestaurantsForAdmin(req: AuthRequest, res: Response): 
     const search = typeof req.query.search === "string" ? req.query.search.trim() : undefined;
     const zone = typeof req.query.zone === "string" ? req.query.zone.trim() : undefined;
     const cuisine = typeof req.query.cuisine === "string" ? req.query.cuisine.trim() : undefined;
+    const radius_km = typeof req.query.radius_km === "string" && req.query.radius_km.trim().length > 0
+      ? Number(req.query.radius_km)
+      : undefined;
+    const parsedRadiusKm = typeof radius_km === "number" && Number.isFinite(radius_km) ? radius_km : undefined;
 
     const rawStatus = typeof req.query.status === "string" ? req.query.status.trim().toLowerCase() : undefined;
     const allowedStatuses = new Set(["active", "inactive", "blocked", "open", "closed"]);
@@ -641,8 +645,22 @@ export async function listRestaurantsForAdmin(req: AuthRequest, res: Response): 
       ? (rawStatus as "active" | "inactive" | "blocked" | "open" | "closed")
       : undefined;
 
-    const rows = await Restaurant.findAllForAdmin({ limit, offset, search, zone, cuisine, status });
-    const total = await Restaurant.countAllForAdmin({ search, zone, cuisine, status });
+    const rows = await Restaurant.findAllForAdmin({
+      limit,
+      offset,
+      search,
+      zone,
+      cuisine,
+      radius_km: parsedRadiusKm,
+      status,
+    });
+    const total = await Restaurant.countAllForAdmin({
+      search,
+      zone,
+      cuisine,
+      radius_km: parsedRadiusKm,
+      status,
+    });
 
     res.status(200).json({
       success: true,
@@ -652,11 +670,15 @@ export async function listRestaurantsForAdmin(req: AuthRequest, res: Response): 
         restaurants: rows.map((row) => ({
           ...Restaurant.toResponse(row),
           branches_count: row.branches_count,
+          owner_name: row.owner_name,
+          owner_phone: row.owner_phone,
+          owner_email: row.owner_email,
         })),
         filters: {
           search: search ?? null,
           zone: zone ?? null,
           cuisine: cuisine ?? null,
+          radius_km: parsedRadiusKm ?? null,
           status: status ?? null,
         },
         pagination: {
@@ -672,6 +694,35 @@ export async function listRestaurantsForAdmin(req: AuthRequest, res: Response): 
       success: false,
       status: "ERROR",
       message: err instanceof Error ? err.message : "Failed to list restaurants",
+      data: null,
+    });
+  }
+}
+
+export async function getRestaurantDashboardStats(_req: AuthRequest, res: Response): Promise<void> {
+  try {
+    void _req;
+    const stats = await Restaurant.getAdminRestaurantStats();
+
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Restaurant dashboard stats retrieved",
+      data: {
+        total_restaurants: stats.total_restaurants,
+        active_restaurants: stats.active_restaurants,
+        inactive_restaurants: stats.inactive_restaurants,
+        newly_joined_restaurants: stats.newly_joined_restaurants,
+        total_transactions: null,
+        commission_earned: null,
+        total_restaurant_withdraws: null,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to fetch dashboard stats",
       data: null,
     });
   }
