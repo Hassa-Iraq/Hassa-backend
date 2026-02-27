@@ -1,27 +1,36 @@
-import express, { Request, Response } from 'express';
-import { sendSuccess } from 'shared/api-response/index';
-import pool from '../db/connection';
+import express, { Request, Response } from "express";
+import pool from "../db/connection";
 
 const router = express.Router();
 
-router.get('/health', async (_req: Request, res: Response) => {
+router.get("/health", async (_req: Request, res: Response) => {
   try {
-    await pool.query('SELECT 1');
-    
-    return sendSuccess(res, {
-      status: 'healthy',
-      service: 'order-service',
-      timestamp: new Date().toISOString(),
-      database: 'connected',
+    await pool.query("SELECT 1");
+
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Order service is healthy",
+      data: {
+        service: "order-service",
+        timestamp: new Date().toISOString(),
+        database: "connected",
+      },
     });
-  } catch (error: any) {
-    return sendSuccess(res, {
-      status: 'unhealthy',
-      service: 'order-service',
-      timestamp: new Date().toISOString(),
-      database: 'disconnected',
-      error: error.message,
-    }, 'Service unhealthy', 503);
+    return;
+  } catch (error) {
+    res.status(503).json({
+      success: false,
+      status: "ERROR",
+      message: "Order service is unhealthy",
+      data: {
+        service: "order-service",
+        timestamp: new Date().toISOString(),
+        database: "disconnected",
+        error: error instanceof Error ? error.message : "Unknown error",
+      },
+    });
+    return;
   }
 });
 
