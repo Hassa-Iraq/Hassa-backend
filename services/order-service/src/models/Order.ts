@@ -235,7 +235,7 @@ export async function updateStatus(id: string, status: OrderStatus): Promise<Ord
   const timeColumn = statusToTimeColumn[status];
   let query = "UPDATE orders.orders SET status = $1";
   const values: unknown[] = [status];
-  let idx = 2;
+  const idx = 2;
 
   if (timeColumn) {
     query += `, ${timeColumn} = NOW()`;
