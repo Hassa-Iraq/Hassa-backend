@@ -3,6 +3,7 @@ import pool from "../db/connection";
 export interface MenuCategoryRow {
   id: string;
   restaurant_id: string;
+  parent_id: string | null;
   name: string;
   description: string | null;
   display_order: number;
@@ -13,12 +14,14 @@ export interface MenuCategoryRow {
 
 export interface CreateMenuCategoryParams {
   restaurant_id: string;
+  parent_id?: string | null;
   name: string;
   description?: string | null;
   display_order?: number;
 }
 
 export interface UpdateMenuCategoryParams {
+  parent_id?: string | null;
   name?: string;
   description?: string | null;
   display_order?: number;
@@ -29,15 +32,17 @@ export async function create(params: CreateMenuCategoryParams): Promise<MenuCate
   let order = params.display_order;
   if (order === undefined) {
     const r = await pool.query(
-      "SELECT COALESCE(MAX(display_order), -1) + 1 AS next_order FROM restaurant.menu_categories WHERE restaurant_id = $1",
-      [params.restaurant_id]
+      `SELECT COALESCE(MAX(display_order), -1) + 1 AS next_order
+       FROM restaurant.menu_categories
+       WHERE restaurant_id = $1 AND COALESCE(parent_id, '00000000-0000-0000-0000-000000000000') = COALESCE($2, '00000000-0000-0000-0000-000000000000')`,
+      [params.restaurant_id, params.parent_id ?? null]
     );
     order = r.rows[0]?.next_order ?? 0;
   }
   const res = await pool.query(
-    `INSERT INTO restaurant.menu_categories (restaurant_id, name, description, display_order, is_active)
-     VALUES ($1, $2, $3, $4, true) RETURNING *`,
-    [params.restaurant_id, params.name, params.description ?? null, order]
+    `INSERT INTO restaurant.menu_categories (restaurant_id, parent_id, name, description, display_order, is_active)
+     VALUES ($1, $2, $3, $4, $5, true) RETURNING *`,
+    [params.restaurant_id, params.parent_id ?? null, params.name, params.description ?? null, order]
   );
   return res.rows[0];
 }
@@ -88,6 +93,10 @@ export async function update(id: string, params: UpdateMenuCategoryParams): Prom
     updates.push(`is_active = $${i++}`);
     values.push(params.is_active);
   }
+  if (params.parent_id !== undefined) {
+    updates.push(`parent_id = $${i++}`);
+    values.push(params.parent_id);
+  }
   if (updates.length === 0) return findById(id);
   values.push(id);
   const r = await pool.query(
@@ -95,6 +104,24 @@ export async function update(id: string, params: UpdateMenuCategoryParams): Prom
     values
   );
   return r.rows[0] ?? null;
+}
+
+export async function findSubcategories(parent_id: string): Promise<MenuCategoryRow[]> {
+  const r = await pool.query(
+    `SELECT * FROM restaurant.menu_categories
+     WHERE parent_id = $1
+     ORDER BY display_order ASC, created_at ASC`,
+    [parent_id]
+  );
+  return r.rows;
+}
+
+export async function countSubcategories(parent_id: string): Promise<number> {
+  const r = await pool.query(
+    "SELECT COUNT(*)::int AS total FROM restaurant.menu_categories WHERE parent_id = $1",
+    [parent_id]
+  );
+  return r.rows[0]?.total ?? 0;
 }
 
 export async function deleteById(id: string): Promise<boolean> {

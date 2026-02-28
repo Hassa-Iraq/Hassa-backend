@@ -76,7 +76,7 @@ export async function searchMenuItems(req: Request, res: Response): Promise<void
     const offset = (page - 1) * limit;
     const pattern = `%${q.replace(/%/g, "\\%").replace(/_/g, "\\_")}%`;
     let whereClause =
-      "mi.is_available = true AND (mi.name ILIKE $1 OR mi.description ILIKE $1)";
+      "mi.is_available = true AND (mi.name ILIKE $1 OR mi.description ILIKE $1 OR array_to_string(COALESCE(mi.search_tags, ARRAY[]::text[]), ' ') ILIKE $1)";
     const params: unknown[] = [pattern];
     if (restaurant_id) {
       whereClause += " AND mi.restaurant_id = $2";
@@ -86,7 +86,7 @@ export async function searchMenuItems(req: Request, res: Response): Promise<void
     const offsetIdx = params.length + 2;
     params.push(limit, offset);
     const result = await pool.query(
-      `SELECT mi.id, mi.restaurant_id, mi.name, mi.description, mi.price, mi.image_url, mi.is_available,
+      `SELECT mi.id, mi.restaurant_id, mi.category_id, mi.subcategory_id, mi.name, mi.description, mi.price, mi.image_url, mi.nutrition, mi.search_tags, mi.is_available,
               r.name AS restaurant_name
        FROM restaurant.menu_items mi
        JOIN restaurant.restaurants r ON r.id = mi.restaurant_id AND r.is_active = true AND r.is_blocked = false AND r.is_open = true AND r.parent_id IS NULL
@@ -96,7 +96,7 @@ export async function searchMenuItems(req: Request, res: Response): Promise<void
       params
     );
     let countQuery =
-      "SELECT COUNT(*)::int AS total FROM restaurant.menu_items mi JOIN restaurant.restaurants r ON r.id = mi.restaurant_id AND r.is_active = true AND r.is_blocked = false AND r.is_open = true AND r.parent_id IS NULL WHERE mi.is_available = true AND (mi.name ILIKE $1 OR mi.description ILIKE $1)";
+      "SELECT COUNT(*)::int AS total FROM restaurant.menu_items mi JOIN restaurant.restaurants r ON r.id = mi.restaurant_id AND r.is_active = true AND r.is_blocked = false AND r.is_open = true AND r.parent_id IS NULL WHERE mi.is_available = true AND (mi.name ILIKE $1 OR mi.description ILIKE $1 OR array_to_string(COALESCE(mi.search_tags, ARRAY[]::text[]), ' ') ILIKE $1)";
     const countParams: unknown[] = [pattern];
     if (restaurant_id) {
       countQuery += " AND mi.restaurant_id = $2";

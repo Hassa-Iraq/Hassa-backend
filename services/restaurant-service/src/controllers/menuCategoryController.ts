@@ -55,8 +55,31 @@ export async function createCategory(req: AuthRequest, res: Response): Promise<v
     }
     const ok = await ensureRestaurantOwnership(req, res, restaurant_id);
     if (!ok) return;
+    const parent_id = req.body.parent_id == null ? null : String(req.body.parent_id);
+    if (parent_id) {
+      const parent = await MenuCategory.findById(parent_id);
+      if (!parent || parent.restaurant_id !== restaurant_id) {
+        res.status(400).json({
+          success: false,
+          status: "ERROR",
+          message: "parent_id is invalid or does not belong to this restaurant",
+          data: null,
+        });
+        return;
+      }
+      if (parent.parent_id !== null) {
+        res.status(400).json({
+          success: false,
+          status: "ERROR",
+          message: "Subcategory nesting beyond one level is not allowed",
+          data: null,
+        });
+        return;
+      }
+    }
     const category = await MenuCategory.create({
       restaurant_id,
+      parent_id,
       name: name.trim(),
       description: (req.body.description as string) ?? null,
       display_order: typeof req.body.display_order === "number" ? req.body.display_order : undefined,
@@ -97,12 +120,26 @@ export async function listCategories(req: AuthRequest, res: Response): Promise<v
     const offset = (page - 1) * limit;
     const categories = await MenuCategory.findByRestaurantId(restaurant_id, { limit, offset });
     const total = await MenuCategory.countByRestaurantId(restaurant_id);
+    const byParent = new Map<string, MenuCategory.MenuCategoryRow[]>();
+    for (const c of categories) {
+      if (!c.parent_id) continue;
+      const list = byParent.get(c.parent_id) ?? [];
+      list.push(c);
+      byParent.set(c.parent_id, list);
+    }
+    const hierarchy = categories
+      .filter((c) => c.parent_id == null)
+      .map((c) => ({
+        ...c,
+        subcategories: byParent.get(c.id) ?? [],
+      }));
     res.status(200).json({
       success: true,
       status: "OK",
       message: "Categories listed",
       data: {
-        categories,
+        categories: hierarchy,
+        flat_categories: categories,
         pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
       },
     });
@@ -131,11 +168,12 @@ export async function getCategory(req: AuthRequest, res: Response): Promise<void
     }
     const ok = await ensureRestaurantOwnership(req, res, category.restaurant_id);
     if (!ok) return;
+    const subcategories = await MenuCategory.findSubcategories(category.id);
     res.status(200).json({
       success: true,
       status: "OK",
       message: "Category retrieved",
-      data: { category },
+      data: { category: { ...category, subcategories } },
     });
   } catch (err) {
     res.status(500).json({
@@ -168,6 +206,39 @@ export async function updateCategory(req: AuthRequest, res: Response): Promise<v
     if (body.description !== undefined) params.description = body.description == null ? null : String(body.description);
     if (typeof body.display_order === "number") params.display_order = body.display_order;
     if (body.is_active !== undefined) params.is_active = Boolean(body.is_active);
+    if (body.parent_id !== undefined) {
+      params.parent_id = body.parent_id == null ? null : String(body.parent_id);
+      if (params.parent_id) {
+        if (params.parent_id === id) {
+          res.status(400).json({
+            success: false,
+            status: "ERROR",
+            message: "A category cannot be its own parent",
+            data: null,
+          });
+          return;
+        }
+        const parent = await MenuCategory.findById(params.parent_id);
+        if (!parent || parent.restaurant_id !== category.restaurant_id) {
+          res.status(400).json({
+            success: false,
+            status: "ERROR",
+            message: "parent_id is invalid or does not belong to this restaurant",
+            data: null,
+          });
+          return;
+        }
+        if (parent.parent_id !== null) {
+          res.status(400).json({
+            success: false,
+            status: "ERROR",
+            message: "Subcategory nesting beyond one level is not allowed",
+            data: null,
+          });
+          return;
+        }
+      }
+    }
     const updated = await MenuCategory.update(id, params);
     if (!updated) {
       res.status(404).json({ success: false, status: "ERROR", message: "Menu category not found", data: null });
@@ -205,6 +276,16 @@ export async function deleteCategory(req: AuthRequest, res: Response): Promise<v
     }
     const ok = await ensureRestaurantOwnership(req, res, category.restaurant_id);
     if (!ok) return;
+    const childCount = await MenuCategory.countSubcategories(id);
+    if (childCount > 0) {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Cannot delete category with subcategories. Move or delete subcategories first.",
+        data: null,
+      });
+      return;
+    }
     await MenuCategory.deleteById(id);
     await cache.del(cacheKeys.restaurantMenu(category.restaurant_id));
     res.status(200).json({

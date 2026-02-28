@@ -126,10 +126,13 @@ export async function getRestaurantMenu(req: Request, res: Response): Promise<vo
         COALESCE(
           (SELECT json_agg(json_build_object(
             'id', mi.id, 'name', mi.name, 'description', mi.description, 'price', mi.price,
-            'image_url', mi.image_url, 'is_available', mi.is_available, 'display_order', mi.display_order
+            'image_url', mi.image_url, 'is_available', mi.is_available, 'display_order', mi.display_order,
+            'category_id', mi.category_id, 'subcategory_id', mi.subcategory_id,
+            'nutrition', mi.nutrition, 'search_tags', mi.search_tags
           ) ORDER BY mi.display_order, mi.created_at)
           FROM restaurant.menu_items mi
-          WHERE mi.category_id = c.id AND mi.is_available = true),
+          WHERE (mi.subcategory_id = c.id OR (mi.subcategory_id IS NULL AND mi.category_id = c.id))
+            AND mi.is_available = true),
           '[]'::json
         ) AS items
        FROM restaurant.menu_categories c
@@ -138,9 +141,9 @@ export async function getRestaurantMenu(req: Request, res: Response): Promise<vo
       [id]
     );
     const uncategorizedResult = await pool.query(
-      `SELECT id, name, description, price, image_url, is_available, display_order
+      `SELECT id, name, description, price, image_url, is_available, display_order, nutrition, search_tags, category_id, subcategory_id
        FROM restaurant.menu_items
-       WHERE restaurant_id = $1 AND category_id IS NULL AND is_available = true
+       WHERE restaurant_id = $1 AND category_id IS NULL AND subcategory_id IS NULL AND is_available = true
        ORDER BY display_order ASC, created_at ASC`,
       [id]
     );

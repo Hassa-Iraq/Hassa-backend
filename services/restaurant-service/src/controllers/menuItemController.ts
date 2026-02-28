@@ -32,6 +32,72 @@ async function ensureRestaurantOwnership(
   return true;
 }
 
+async function resolveCategoryAndSubcategory(
+  restaurantId: string,
+  categoryIdInput: unknown,
+  subcategoryIdInput: unknown
+): Promise<{ category_id: string | null; subcategory_id: string | null; error?: string }> {
+  const category_id = categoryIdInput == null ? null : String(categoryIdInput);
+  const subcategory_id = subcategoryIdInput == null ? null : String(subcategoryIdInput);
+
+  if (!category_id && !subcategory_id) {
+    return { category_id: null, subcategory_id: null };
+  }
+
+  let category: MenuCategory.MenuCategoryRow | null = null;
+  if (category_id) {
+    category = await MenuCategory.findById(category_id);
+    if (!category || category.restaurant_id !== restaurantId) {
+      return {
+        category_id: null,
+        subcategory_id: null,
+        error: "Menu category not found or does not belong to this restaurant",
+      };
+    }
+    if (category.parent_id !== null) {
+      return {
+        category_id: null,
+        subcategory_id: null,
+        error: "category_id must be a parent category, not a subcategory",
+      };
+    }
+  }
+
+  if (subcategory_id) {
+    const subcategory = await MenuCategory.findById(subcategory_id);
+    if (!subcategory || subcategory.restaurant_id !== restaurantId) {
+      return {
+        category_id: null,
+        subcategory_id: null,
+        error: "Subcategory not found or does not belong to this restaurant",
+      };
+    }
+    if (subcategory.parent_id == null) {
+      return {
+        category_id: null,
+        subcategory_id: null,
+        error: "subcategory_id must reference a child category",
+      };
+    }
+    if (category_id && subcategory.parent_id !== category_id) {
+      return {
+        category_id: null,
+        subcategory_id: null,
+        error: "subcategory_id does not belong to category_id",
+      };
+    }
+    return {
+      category_id: subcategory.parent_id,
+      subcategory_id: subcategory.id,
+    };
+  }
+
+  return {
+    category_id: category?.id ?? null,
+    subcategory_id: null,
+  };
+}
+
 export async function createMenuItem(req: AuthRequest, res: Response): Promise<void> {
   try {
     const restaurant_id = req.body.restaurant_id as string;
@@ -66,26 +132,35 @@ export async function createMenuItem(req: AuthRequest, res: Response): Promise<v
     }
     const ok = await ensureRestaurantOwnership(req, res, restaurant_id);
     if (!ok) return;
-    const category_id = (req.body.category_id as string) ?? null;
-    if (category_id) {
-      const cat = await MenuCategory.findById(category_id);
-      if (!cat || cat.restaurant_id !== restaurant_id) {
-        res.status(404).json({
-          success: false,
-          status: "ERROR",
-          message: "Menu category not found or does not belong to this restaurant",
-          data: null,
-        });
-        return;
-      }
+    const resolved = await resolveCategoryAndSubcategory(
+      restaurant_id,
+      req.body.category_id,
+      req.body.subcategory_id
+    );
+    if (resolved.error) {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: resolved.error,
+        data: null,
+      });
+      return;
     }
     const item = await MenuItem.create({
       restaurant_id,
-      category_id: category_id || null,
+      category_id: resolved.category_id,
+      subcategory_id: resolved.subcategory_id,
       name: name.trim(),
       description: (req.body.description as string) ?? null,
       price,
       image_url: (req.body.image_url as string) ?? null,
+      nutrition:
+        typeof req.body.nutrition === "object" && req.body.nutrition != null
+          ? (req.body.nutrition as Record<string, unknown>)
+          : null,
+      search_tags: Array.isArray(req.body.search_tags)
+        ? (req.body.search_tags as unknown[]).map((v) => String(v))
+        : null,
       is_available: req.body.is_available !== undefined ? Boolean(req.body.is_available) : true,
       display_order: typeof req.body.display_order === "number" ? req.body.display_order : 0,
     });
@@ -124,8 +199,9 @@ export async function listMenuItems(req: AuthRequest, res: Response): Promise<vo
     const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit)) || 20));
     const offset = (page - 1) * limit;
     const category_id = (req.query.category_id as string) || undefined;
-    const items = await MenuItem.findByRestaurantId(restaurant_id, { category_id, limit, offset });
-    const total = await MenuItem.countByRestaurantId(restaurant_id, category_id || null);
+    const subcategory_id = (req.query.subcategory_id as string) || undefined;
+    const items = await MenuItem.findByRestaurantId(restaurant_id, { category_id, subcategory_id, limit, offset });
+    const total = await MenuItem.countByRestaurantId(restaurant_id, category_id || null, subcategory_id || null);
     res.status(200).json({
       success: true,
       status: "OK",
@@ -193,24 +269,40 @@ export async function updateMenuItem(req: AuthRequest, res: Response): Promise<v
     if (!ok) return;
     const body = req.body as Record<string, unknown>;
     const params: MenuItem.UpdateMenuItemParams = {};
-    if (body.category_id !== undefined) params.category_id = body.category_id == null ? null : String(body.category_id);
     if (body.name !== undefined) params.name = String(body.name);
     if (body.description !== undefined) params.description = body.description == null ? null : String(body.description);
     if (typeof body.price === "number") params.price = body.price;
     if (body.image_url !== undefined) params.image_url = body.image_url == null ? null : String(body.image_url);
+    if (body.nutrition !== undefined) {
+      params.nutrition =
+        body.nutrition == null
+          ? null
+          : (typeof body.nutrition === "object" ? (body.nutrition as Record<string, unknown>) : null);
+    }
+    if (body.search_tags !== undefined) {
+      params.search_tags = Array.isArray(body.search_tags)
+        ? (body.search_tags as unknown[]).map((v) => String(v))
+        : null;
+    }
     if (body.is_available !== undefined) params.is_available = Boolean(body.is_available);
     if (typeof body.display_order === "number") params.display_order = body.display_order;
-    if (params.category_id) {
-      const cat = await MenuCategory.findById(params.category_id);
-      if (!cat || cat.restaurant_id !== item.restaurant_id) {
+    if (body.category_id !== undefined || body.subcategory_id !== undefined) {
+      const resolved = await resolveCategoryAndSubcategory(
+        item.restaurant_id,
+        body.category_id !== undefined ? body.category_id : item.category_id,
+        body.subcategory_id !== undefined ? body.subcategory_id : item.subcategory_id
+      );
+      if (resolved.error) {
         res.status(400).json({
           success: false,
           status: "ERROR",
-          message: "Category not found or does not belong to this restaurant",
+          message: resolved.error,
           data: null,
         });
         return;
       }
+      params.category_id = resolved.category_id;
+      params.subcategory_id = resolved.subcategory_id;
     }
     const updated = await MenuItem.update(id, params);
     if (!updated) {
