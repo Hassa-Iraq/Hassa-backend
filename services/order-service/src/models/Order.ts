@@ -81,7 +81,8 @@ export interface ListOrdersFilters {
   user_id?: string;
   restaurant_id?: string;
   restaurant_ids?: string[];
-  status?: OrderStatus;
+  statuses?: OrderStatus[];
+  search?: string;
   date_from?: string;
   date_to?: string;
 }
@@ -103,9 +104,13 @@ function buildWhere(filters: ListOrdersFilters): { where: string; values: unknow
     conditions.push(`o.restaurant_id = ANY($${i++})`);
     values.push(filters.restaurant_ids);
   }
-  if (filters.status) {
-    conditions.push(`o.status = $${i++}`);
-    values.push(filters.status);
+  if (filters.statuses && filters.statuses.length > 0) {
+    conditions.push(`o.status = ANY($${i++})`);
+    values.push(filters.statuses);
+  }
+  if (filters.search) {
+    conditions.push(`o.order_number ILIKE $${i++}`);
+    values.push(filters.search);
   }
   if (filters.date_from) {
     conditions.push(`o.created_at >= $${i++}`);

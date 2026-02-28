@@ -139,7 +139,6 @@ export async function listCategories(req: AuthRequest, res: Response): Promise<v
       message: "Categories listed",
       data: {
         categories: hierarchy,
-        flat_categories: categories,
         pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
       },
     });

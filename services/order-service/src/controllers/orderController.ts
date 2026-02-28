@@ -26,6 +26,19 @@ const ALLOWED_NEXT_STATUSES: Record<Order.OrderStatus, Order.OrderStatus[]> = {
   rejected: [],
 };
 
+const ORDER_LIST_STATUS_MAP: Record<string, Order.OrderStatus[] | null> = {
+  all: [],
+  pending: ["pending"],
+  accepted: ["confirmed"],
+  processing: ["preparing", "ready_for_pickup"],
+  "food on the way": ["out_for_delivery"],
+  delivered: ["delivered"],
+  cancelled: ["cancelled", "rejected"],
+  "payment failed": null,
+  refunded: null,
+  "offline payments": null,
+};
+
 function parseMoney(value: unknown, defaultValue = 0): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim().length > 0) {
@@ -288,14 +301,56 @@ export async function listOrders(req: AuthRequest, res: Response): Promise<void>
     const page = Math.max(1, parseInt(String(req.query.page)) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit)) || 20));
     const offset = (page - 1) * limit;
-    const status = typeof req.query.status === "string" ? (req.query.status as Order.OrderStatus) : undefined;
+    const rawStatus = typeof req.query.status === "string" ? req.query.status.trim().toLowerCase() : "";
+    const normalizedStatus = rawStatus.replace(/\s+/g, " ");
+    const searchQuery = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    const escapedSearch = searchQuery
+      ? `%${searchQuery.replace(/%/g, "\\%").replace(/_/g, "\\_")}%`
+      : undefined;
     const dateFrom = typeof req.query.date_from === "string" ? req.query.date_from : undefined;
     const dateTo = typeof req.query.date_to === "string" ? req.query.date_to : undefined;
+    const missingStatusFilters = ["payment failed", "refunded", "offline payments"];
+
+    if (normalizedStatus && !(normalizedStatus in ORDER_LIST_STATUS_MAP)) {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message:
+          "Invalid status filter. Use one of: All, Pending, Accepted, Processing, Food on the way, Delivered, Cancelled, Payment Failed, Refunded, Offline Payments",
+        data: null,
+      });
+      return;
+    }
+    if (normalizedStatus && ORDER_LIST_STATUS_MAP[normalizedStatus] === null) {
+      res.status(200).json({
+        success: true,
+        status: "OK",
+        message: "Orders listed",
+        data: {
+          orders: [],
+          filters: {
+            status: normalizedStatus,
+            q: searchQuery || null,
+          },
+          note:
+            "This filter depends on payment module fields and will be enabled fully in the payments phase.",
+          pending_status_filters: missingStatusFilters,
+          pagination: {
+            page,
+            limit,
+            total: 0,
+            totalPages: 0,
+          },
+        },
+      });
+      return;
+    }
 
     const filters: Order.ListOrdersFilters = {
       limit,
       offset,
-      status,
+      statuses: normalizedStatus ? ORDER_LIST_STATUS_MAP[normalizedStatus] ?? [] : undefined,
+      search: escapedSearch,
       date_from: dateFrom,
       date_to: dateTo,
     };
@@ -342,7 +397,8 @@ export async function listOrders(req: AuthRequest, res: Response): Promise<void>
       user_id: filters.user_id,
       restaurant_id: filters.restaurant_id,
       restaurant_ids: filters.restaurant_ids,
-      status: filters.status,
+      statuses: filters.statuses,
+      search: filters.search,
       date_from: filters.date_from,
       date_to: filters.date_to,
     });
@@ -359,6 +415,11 @@ export async function listOrders(req: AuthRequest, res: Response): Promise<void>
       message: "Orders listed",
       data: {
         orders,
+        filters: {
+          status: normalizedStatus || "all",
+          q: searchQuery || null,
+        },
+        pending_status_filters: missingStatusFilters,
         pagination: {
           page,
           limit,
