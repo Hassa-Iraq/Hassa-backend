@@ -365,11 +365,68 @@ export const me = async (req: AuthRequest, res: Response) => {
         data: null,
       });
     }
+
+    let restaurantData: {
+      primary_restaurant: Record<string, unknown> | null;
+      restaurants: Record<string, unknown>[];
+    } | null = null;
+
+    if ((user.role ?? "").toLowerCase() === "restaurant") {
+      try {
+        const restaurantsResult = await pool.query(
+          `SELECT
+             id, user_id, parent_id, name, address, zone, cuisine,
+             latitude, longitude, service_radius_km,
+             logo_url, cover_image_url,
+             is_active, is_open, is_blocked,
+             created_at, updated_at
+           FROM restaurant.restaurants
+           WHERE user_id = $1
+           ORDER BY (CASE WHEN parent_id IS NULL THEN 0 ELSE 1 END), created_at ASC`,
+          [user.id]
+        );
+
+        const restaurants = restaurantsResult.rows.map((r) => ({
+          id: r.id,
+          user_id: r.user_id,
+          parent_id: r.parent_id,
+          name: r.name,
+          address: r.address,
+          zone: r.zone,
+          cuisine: r.cuisine,
+          latitude: r.latitude != null ? parseFloat(String(r.latitude)) : null,
+          longitude: r.longitude != null ? parseFloat(String(r.longitude)) : null,
+          service_radius_km: r.service_radius_km != null ? parseFloat(String(r.service_radius_km)) : null,
+          logo_url: r.logo_url,
+          cover_image_url: r.cover_image_url,
+          is_active: r.is_active,
+          is_open: r.is_open,
+          is_blocked: r.is_blocked,
+          created_at: r.created_at,
+          updated_at: r.updated_at,
+        }));
+
+        restaurantData = {
+          primary_restaurant: restaurants.find((r) => r.parent_id == null) ?? restaurants[0] ?? null,
+          restaurants,
+        };
+      } catch {
+        restaurantData = {
+          primary_restaurant: null,
+          restaurants: [],
+        };
+      }
+    }
+
     return res.status(200).json({
       success: true,
       status: "OK",
       message: "Profile retrieved successfully",
-      data: { user: User.toUserResponse(user) },
+      data: {
+        user: User.toUserResponse(user),
+        restaurant: restaurantData?.primary_restaurant ?? null,
+        restaurants: restaurantData?.restaurants ?? [],
+      },
     });
   } catch (err) {
     return res.status(500).json({
