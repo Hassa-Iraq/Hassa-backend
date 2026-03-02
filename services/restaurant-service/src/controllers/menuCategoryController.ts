@@ -3,6 +3,7 @@ import * as MenuCategory from "../models/MenuCategory";
 import * as Restaurant from "../models/Restaurant";
 import { AuthRequest } from "../middleware/auth";
 import { cache, cacheKeys } from "../utils/redis";
+import { getFileUrl } from "../utils/fileUpload";
 
 async function ensureRestaurantOwnership(
   req: AuthRequest,
@@ -82,6 +83,7 @@ export async function createCategory(req: AuthRequest, res: Response): Promise<v
       parent_id,
       name: name.trim(),
       description: (req.body.description as string) ?? null,
+      image_url: (req.body.image_url as string) ?? null,
       display_order: typeof req.body.display_order === "number" ? req.body.display_order : undefined,
     });
     await cache.del(cacheKeys.restaurantMenu(restaurant_id));
@@ -203,6 +205,7 @@ export async function updateCategory(req: AuthRequest, res: Response): Promise<v
     const params: MenuCategory.UpdateMenuCategoryParams = {};
     if (body.name !== undefined) params.name = String(body.name);
     if (body.description !== undefined) params.description = body.description == null ? null : String(body.description);
+    if (body.image_url !== undefined) params.image_url = body.image_url == null ? null : String(body.image_url);
     if (typeof body.display_order === "number") params.display_order = body.display_order;
     if (body.is_active !== undefined) params.is_active = Boolean(body.is_active);
     if (body.parent_id !== undefined) {
@@ -255,6 +258,36 @@ export async function updateCategory(req: AuthRequest, res: Response): Promise<v
       success: false,
       status: "ERROR",
       message: err instanceof Error ? err.message : "Failed to update category",
+      data: null,
+    });
+  }
+}
+
+export async function uploadCategoryImage(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "category_image file is required",
+        data: null,
+      });
+      return;
+    }
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Category image uploaded successfully",
+      data: {
+        image_url: getFileUrl(file.filename, file.fieldname),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to upload category image",
       data: null,
     });
   }

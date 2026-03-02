@@ -4,7 +4,7 @@ import { join } from "path";
 import { existsSync, mkdirSync } from "fs";
 
 const BASE_UPLOAD = process.env.UPLOAD_DIR || join(process.cwd(), "uploads");
-const SUBDIRS = ["banners", "restaurants", "menu-items"] as const;
+const SUBDIRS = ["banners", "restaurants", "menu-items", "menu-categories"] as const;
 
 for (const sub of SUBDIRS) {
   const dir = join(BASE_UPLOAD, sub);
@@ -17,6 +17,7 @@ function subdirForField(fieldname: string): string {
   if (fieldname === "banner_image") return "banners";
   if (fieldname === "logo" || fieldname === "cover_image" || fieldname === "certificate") return "restaurants";
   if (fieldname === "item_image") return "menu-items";
+  if (fieldname === "category_image") return "menu-categories";
   return "banners";
 }
 
@@ -26,6 +27,7 @@ function prefixForField(fieldname: string): string {
   if (fieldname === "cover_image") return "cover";
   if (fieldname === "certificate") return "cert";
   if (fieldname === "item_image") return "item";
+  if (fieldname === "category_image") return "category";
   return "file";
 }
 

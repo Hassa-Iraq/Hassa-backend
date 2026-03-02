@@ -4,6 +4,7 @@ import * as MenuCategory from "../models/MenuCategory";
 import * as Restaurant from "../models/Restaurant";
 import { AuthRequest } from "../middleware/auth";
 import { cache, cacheKeys } from "../utils/redis";
+import { getFileUrl } from "../utils/fileUpload";
 
 async function ensureRestaurantOwnership(
   req: AuthRequest,
@@ -356,6 +357,36 @@ export async function deleteMenuItem(req: AuthRequest, res: Response): Promise<v
       success: false,
       status: "ERROR",
       message: err instanceof Error ? err.message : "Failed to delete menu item",
+      data: null,
+    });
+  }
+}
+
+export async function uploadMenuItemImage(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "item_image file is required",
+        data: null,
+      });
+      return;
+    }
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Menu item image uploaded successfully",
+      data: {
+        image_url: getFileUrl(file.filename, file.fieldname),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to upload menu item image",
       data: null,
     });
   }

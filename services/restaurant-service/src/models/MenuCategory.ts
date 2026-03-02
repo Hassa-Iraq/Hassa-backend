@@ -6,6 +6,7 @@ export interface MenuCategoryRow {
   parent_id: string | null;
   name: string;
   description: string | null;
+  image_url: string | null;
   display_order: number;
   is_active: boolean;
   created_at: Date;
@@ -17,6 +18,7 @@ export interface CreateMenuCategoryParams {
   parent_id?: string | null;
   name: string;
   description?: string | null;
+  image_url?: string | null;
   display_order?: number;
 }
 
@@ -24,6 +26,7 @@ export interface UpdateMenuCategoryParams {
   parent_id?: string | null;
   name?: string;
   description?: string | null;
+  image_url?: string | null;
   display_order?: number;
   is_active?: boolean;
 }
@@ -40,9 +43,16 @@ export async function create(params: CreateMenuCategoryParams): Promise<MenuCate
     order = r.rows[0]?.next_order ?? 0;
   }
   const res = await pool.query(
-    `INSERT INTO restaurant.menu_categories (restaurant_id, parent_id, name, description, display_order, is_active)
-     VALUES ($1, $2, $3, $4, $5, true) RETURNING *`,
-    [params.restaurant_id, params.parent_id ?? null, params.name, params.description ?? null, order]
+    `INSERT INTO restaurant.menu_categories (restaurant_id, parent_id, name, description, image_url, display_order, is_active)
+     VALUES ($1, $2, $3, $4, $5, $6, true) RETURNING *`,
+    [
+      params.restaurant_id,
+      params.parent_id ?? null,
+      params.name,
+      params.description ?? null,
+      params.image_url ?? null,
+      order,
+    ]
   );
   return res.rows[0];
 }
@@ -84,6 +94,10 @@ export async function update(id: string, params: UpdateMenuCategoryParams): Prom
   if (params.description !== undefined) {
     updates.push(`description = $${i++}`);
     values.push(params.description);
+  }
+  if (params.image_url !== undefined) {
+    updates.push(`image_url = $${i++}`);
+    values.push(params.image_url);
   }
   if (params.display_order !== undefined) {
     updates.push(`display_order = $${i++}`);
