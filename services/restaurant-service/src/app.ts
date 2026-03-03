@@ -32,11 +32,11 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/uploads", express.static(BASE_UPLOAD_DIR));
 app.use("/", healthRoutes);
-app.use("/", restaurantRoutes);
 app.use("/menu-categories", menuCategoryRoutes);
 app.use("/menu-items", menuItemRoutes);
 app.use("/discover", discoveryRoutes);
 app.use("/search", searchRoutes);
 app.use("/", bannerRoutes);
+app.use("/", restaurantRoutes);
 
 export default app;
