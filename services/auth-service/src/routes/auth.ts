@@ -24,6 +24,15 @@ router.delete(
   authorize("admin"),
   authController.deleteRestaurantOwner
 );
+router.post("/admin/employee-roles", authenticate, authorize("admin"), authController.createEmployeeRole);
+router.get("/admin/employee-roles", authenticate, authorize("admin"), authController.listEmployeeRoles);
+router.get("/admin/employee-roles/:id", authenticate, authorize("admin"), authController.getEmployeeRole);
+router.patch("/admin/employee-roles/:id", authenticate, authorize("admin"), authController.updateEmployeeRole);
+router.post("/admin/employees", authenticate, authorize("admin"), authController.addEmployee);
+router.get("/admin/employees", authenticate, authorize("admin"), authController.listEmployees);
+router.get("/admin/employees/:id", authenticate, authorize("admin"), authController.getEmployeeById);
+router.patch("/admin/employees/:id/role", authenticate, authorize("admin"), authController.assignEmployeeRole);
+router.patch("/admin/employees/:id/status", authenticate, authorize("admin"), authController.updateEmployeeStatus);
 
 router.post("/signup/request-otp", authController.signupRequestOtp);
 router.post("/signup/email/verify-otp", authController.signupEmailVerifyOtp);

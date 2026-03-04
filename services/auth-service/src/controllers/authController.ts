@@ -23,6 +23,7 @@ import {
 import config from "../config/index";
 import { Pool } from "pg";
 import pool from "../db/connection";
+import * as EmployeeRole from "../models/EmployeeRole";
 
 /**
  * POST /auth/register
@@ -370,6 +371,14 @@ export const me = async (req: AuthRequest, res: Response) => {
       primary_restaurant: Record<string, unknown> | null;
       restaurants: Record<string, unknown>[];
     } | null = null;
+    let employeeRoleData:
+      | {
+          employee_role_id: string | null;
+          employee_role_name: string | null;
+          employee_permissions: Record<string, unknown> | null;
+          employee_is_active: boolean | null;
+        }
+      | null = null;
 
     if ((user.role ?? "").toLowerCase() === "restaurant") {
       try {
@@ -417,6 +426,9 @@ export const me = async (req: AuthRequest, res: Response) => {
         };
       }
     }
+    if ((user.role ?? "").toLowerCase() === "employee") {
+      employeeRoleData = await EmployeeRole.findEmployeeRoleForUser(user.id);
+    }
 
     return res.status(200).json({
       success: true,
@@ -426,6 +438,7 @@ export const me = async (req: AuthRequest, res: Response) => {
         user: User.toUserResponse(user),
         restaurant: restaurantData?.primary_restaurant ?? null,
         restaurants: restaurantData?.restaurants ?? [],
+        employee_role: employeeRoleData,
       },
     });
   } catch (err) {
@@ -946,6 +959,521 @@ export const deleteRestaurantOwner = async (req: AuthRequest, res: Response) => 
       success: false,
       status: "ERROR",
       message: (err as Error).message || "Failed to delete restaurant owner",
+      data: null,
+    });
+  }
+};
+
+/**
+ * POST /auth/admin/employee-roles
+ * Body: { name, description?, permissions? }
+ */
+export const createEmployeeRole = async (req: AuthRequest, res: Response) => {
+  try {
+    const { name, description, permissions } = req.body as {
+      name?: string;
+      description?: string | null;
+      permissions?: Record<string, unknown>;
+    };
+    if (!name || typeof name !== "string" || !trim(name)) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Role name is required",
+        data: null,
+      });
+    }
+    if (permissions !== undefined && (permissions == null || typeof permissions !== "object" || Array.isArray(permissions))) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "permissions must be an object",
+        data: null,
+      });
+    }
+
+    const existing = await EmployeeRole.findRoleByName(trim(name));
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        status: "ERROR",
+        message: "Employee role with this name already exists",
+        data: null,
+      });
+    }
+
+    const role = await EmployeeRole.createRole({
+      name: trim(name),
+      description: typeof description === "string" ? trim(description) || null : null,
+      permissions: permissions ?? {},
+      created_by_admin_id: req.user?.id ?? null,
+    });
+
+    return res.status(201).json({
+      success: true,
+      status: "OK",
+      message: "Employee role created successfully",
+      data: { role },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to create employee role",
+      data: null,
+    });
+  }
+};
+
+/**
+ * GET /auth/admin/employee-roles
+ */
+export const listEmployeeRoles = async (req: AuthRequest, res: Response) => {
+  try {
+    const page = Math.max(1, parseInt(String(req.query.page)) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit)) || 20));
+    const offset = (page - 1) * limit;
+    const isActive =
+      typeof req.query.is_active === "string"
+        ? req.query.is_active.toLowerCase() === "true"
+        : undefined;
+
+    const roles = await EmployeeRole.listRoles({ is_active: isActive, limit, offset });
+    const total = await EmployeeRole.countRoles({ is_active: isActive });
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Employee roles listed",
+      data: {
+        roles,
+        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to list employee roles",
+      data: null,
+    });
+  }
+};
+
+/**
+ * GET /auth/admin/employee-roles/:id
+ */
+export const getEmployeeRole = async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id;
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Role id is required",
+        data: null,
+      });
+    }
+    const role = await EmployeeRole.findRoleById(id);
+    if (!role) {
+      return res.status(404).json({
+        success: false,
+        status: "ERROR",
+        message: "Employee role not found",
+        data: null,
+      });
+    }
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Employee role retrieved",
+      data: { role },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to get employee role",
+      data: null,
+    });
+  }
+};
+
+/**
+ * PATCH /auth/admin/employee-roles/:id
+ */
+export const updateEmployeeRole = async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id;
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Role id is required",
+        data: null,
+      });
+    }
+    const body = req.body as {
+      name?: string;
+      description?: string | null;
+      permissions?: Record<string, unknown>;
+      is_active?: boolean;
+    };
+    if (body.permissions !== undefined && (body.permissions == null || typeof body.permissions !== "object" || Array.isArray(body.permissions))) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "permissions must be an object",
+        data: null,
+      });
+    }
+    const updated = await EmployeeRole.updateRole(id, {
+      name: body.name !== undefined ? trim(String(body.name)) : undefined,
+      description: body.description === undefined ? undefined : (body.description == null ? null : trim(String(body.description))),
+      permissions: body.permissions,
+      is_active: body.is_active,
+    });
+    if (!updated) {
+      return res.status(404).json({
+        success: false,
+        status: "ERROR",
+        message: "Employee role not found",
+        data: null,
+      });
+    }
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Employee role updated successfully",
+      data: { role: updated },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to update employee role",
+      data: null,
+    });
+  }
+};
+
+/**
+ * POST /auth/admin/employees
+ * Body: { email, password, phone, full_name?, image_url?, employee_role_id, is_active? }
+ */
+export const addEmployee = async (req: AuthRequest, res: Response) => {
+  try {
+    const { email, password, phone, full_name, image_url, employee_role_id, is_active } = req.body as {
+      email?: string;
+      password?: string;
+      phone?: string;
+      full_name?: string;
+      image_url?: string;
+      employee_role_id?: string;
+      is_active?: boolean;
+    };
+    if (!email || !password || !phone || !employee_role_id) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "email, password, phone, and employee_role_id are required",
+        data: null,
+      });
+    }
+    const emailTrimmed = trim(email).toLowerCase();
+    if (!isValidEmail(emailTrimmed)) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Please provide a valid email address",
+        data: null,
+      });
+    }
+    if (!isValidPassword(password)) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Password must be at least 8 characters and contain one uppercase letter, one lowercase letter, and one number",
+        data: null,
+      });
+    }
+    const normalizedPhone = trim(String(phone)).startsWith("+")
+      ? trim(String(phone))
+      : "+" + trim(String(phone));
+    if (!validatePhoneFormat(normalizedPhone)) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Invalid phone number. Use E.164 format (e.g. +923001234567)",
+        data: null,
+      });
+    }
+    if (await User.existsByEmail(emailTrimmed)) {
+      return res.status(409).json({
+        success: false,
+        status: "ERROR",
+        message: "Email is already registered",
+        data: null,
+      });
+    }
+    if (await User.existsByPhone(normalizedPhone)) {
+      return res.status(409).json({
+        success: false,
+        status: "ERROR",
+        message: "Phone number is already registered",
+        data: null,
+      });
+    }
+
+    const employeeRole = await EmployeeRole.findRoleById(employee_role_id);
+    if (!employeeRole || !employeeRole.is_active) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "employee_role_id is invalid or inactive",
+        data: null,
+      });
+    }
+    const roleRow = await Role.findByName("employee");
+    if (!roleRow) {
+      return res.status(500).json({
+        success: false,
+        status: "ERROR",
+        message: "Employee role not found in auth.roles",
+        data: null,
+      });
+    }
+
+    const passwordHash = await hashPassword(password);
+    const created = await User.create({
+      email: emailTrimmed,
+      phone: normalizedPhone,
+      full_name: typeof full_name === "string" ? trim(full_name) || null : null,
+      password_hash: passwordHash,
+      role_id: roleRow.id,
+      email_verified: true,
+      phone_verified: true,
+    });
+
+    try {
+      await EmployeeRole.createEmployeeProfile({
+        user_id: created.id,
+        is_active: is_active !== undefined ? Boolean(is_active) : true,
+        created_by_admin_id: req.user?.id ?? null,
+      });
+      await EmployeeRole.assignRoleToEmployee({
+        user_id: created.id,
+        employee_role_id,
+        assigned_by_admin_id: req.user?.id ?? null,
+      });
+      if (image_url !== undefined) {
+        await User.updateProfile(created.id, {
+          profile_picture_url: typeof image_url === "string" ? trim(image_url) || null : null,
+        });
+      }
+    } catch (innerError) {
+      await User.deleteById(created.id);
+      throw innerError;
+    }
+
+    const employee = await EmployeeRole.findEmployeeById(created.id);
+    return res.status(201).json({
+      success: true,
+      status: "OK",
+      message: "Employee created successfully",
+      data: { employee },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to create employee",
+      data: null,
+    });
+  }
+};
+
+/**
+ * GET /auth/admin/employees
+ */
+export const listEmployees = async (req: AuthRequest, res: Response) => {
+  try {
+    const page = Math.max(1, parseInt(String(req.query.page)) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit)) || 20));
+    const offset = (page - 1) * limit;
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : undefined;
+    const employee_role_id = typeof req.query.employee_role_id === "string" ? req.query.employee_role_id : undefined;
+    const is_active =
+      typeof req.query.is_active === "string"
+        ? req.query.is_active.toLowerCase() === "true"
+        : undefined;
+
+    const employees = await EmployeeRole.listEmployees({
+      search,
+      employee_role_id,
+      is_active,
+      limit,
+      offset,
+    });
+    const total = await EmployeeRole.countEmployees({
+      search,
+      employee_role_id,
+      is_active,
+    });
+
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Employees listed",
+      data: {
+        employees,
+        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to list employees",
+      data: null,
+    });
+  }
+};
+
+/**
+ * GET /auth/admin/employees/:id
+ */
+export const getEmployeeById = async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id;
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Employee id is required",
+        data: null,
+      });
+    }
+    const employee = await EmployeeRole.findEmployeeById(id);
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        status: "ERROR",
+        message: "Employee not found",
+        data: null,
+      });
+    }
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Employee retrieved",
+      data: { employee },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to get employee",
+      data: null,
+    });
+  }
+};
+
+/**
+ * PATCH /auth/admin/employees/:id/role
+ * Body: { employee_role_id }
+ */
+export const assignEmployeeRole = async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id;
+    const { employee_role_id } = req.body as { employee_role_id?: string };
+    if (!id || !employee_role_id) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Employee id and employee_role_id are required",
+        data: null,
+      });
+    }
+    const employee = await EmployeeRole.findEmployeeById(id);
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        status: "ERROR",
+        message: "Employee not found",
+        data: null,
+      });
+    }
+    const employeeRole = await EmployeeRole.findRoleById(employee_role_id);
+    if (!employeeRole || !employeeRole.is_active) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "employee_role_id is invalid or inactive",
+        data: null,
+      });
+    }
+
+    await EmployeeRole.assignRoleToEmployee({
+      user_id: id,
+      employee_role_id,
+      assigned_by_admin_id: req.user?.id ?? null,
+    });
+    const updated = await EmployeeRole.findEmployeeById(id);
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Employee role assigned successfully",
+      data: { employee: updated },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to assign employee role",
+      data: null,
+    });
+  }
+};
+
+/**
+ * PATCH /auth/admin/employees/:id/status
+ * Body: { is_active }
+ */
+export const updateEmployeeStatus = async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id;
+    const { is_active } = req.body as { is_active?: boolean };
+    if (!id || is_active === undefined) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Employee id and is_active are required",
+        data: null,
+      });
+    }
+    const employee = await EmployeeRole.findEmployeeById(id);
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        status: "ERROR",
+        message: "Employee not found",
+        data: null,
+      });
+    }
+
+    await EmployeeRole.updateEmployeeProfile(id, { is_active: Boolean(is_active) });
+    const updated = await EmployeeRole.findEmployeeById(id);
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Employee status updated successfully",
+      data: { employee: updated },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to update employee status",
       data: null,
     });
   }
