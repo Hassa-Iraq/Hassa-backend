@@ -1,6 +1,7 @@
 import express from "express";
 import { authenticate, authorize } from "../middlewares/auth";
 import * as authController from "../controllers/authController";
+import { upload } from "../utils/fileUpload";
 
 const router = express.Router();
 
@@ -10,6 +11,12 @@ router.post("/login/phone", authController.loginPhone);
 
 router.get("/me", authenticate, authController.me);
 router.patch("/profile", authenticate, authController.updateProfile);
+router.post(
+  "/profile/upload-image",
+  authenticate,
+  upload.single("profile_picture"),
+  authController.uploadProfileImage
+);
 
 router.post("/admin", authenticate, authorize("admin"), authController.addAdmin);
 router.post(
