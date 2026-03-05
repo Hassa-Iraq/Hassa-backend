@@ -23,6 +23,7 @@ import {
 import config from "../config/index";
 import { Pool } from "pg";
 import pool from "../db/connection";
+import { getFileUrl } from "../utils/fileUpload";
 import * as EmployeeRole from "../models/EmployeeRole";
 
 /**
@@ -539,6 +540,67 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
       success: false,
       status: "ERROR",
       message: (err as Error).message || "Failed to update profile",
+      data: null,
+    });
+  }
+};
+
+/**
+ * POST /auth/profile/upload-image
+ * multipart/form-data: profile_picture=<image>
+ */
+export const uploadProfileImage = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({
+        success: false,
+        status: "ERROR",
+        message: "Authentication required",
+        data: null,
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "profile_picture image file is required",
+        data: null,
+      });
+    }
+
+    const profilePictureUrl = getFileUrl(req.file.filename);
+    const rawSaveToProfile = req.body?.save_to_profile;
+    const saveToProfile =
+      rawSaveToProfile === true ||
+      rawSaveToProfile === "true" ||
+      rawSaveToProfile === "1" ||
+      rawSaveToProfile === 1;
+
+    let user = null;
+    if (saveToProfile) {
+      await User.updateProfile(req.user.id, { profile_picture_url: profilePictureUrl });
+      const updatedUser = await User.findByIdForProfile(req.user.id);
+      user = updatedUser ? User.toUserResponse(updatedUser) : null;
+    }
+
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Profile image uploaded successfully",
+      data: {
+        image_url: profilePictureUrl,
+        profile_picture_url: profilePictureUrl,
+        path: profilePictureUrl,
+        saved_to_profile: saveToProfile,
+        user,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to upload profile image",
       data: null,
     });
   }
