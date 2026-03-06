@@ -748,13 +748,22 @@ export async function getRestaurant(req: AuthRequest, res: Response): Promise<vo
     const id = req.params.id as string;
     const row = await ensureOwnership(req, res, id, { allowAdmin: true });
     if (!row) return;
+    const rowWithOwner = await Restaurant.findByIdWithOwner(id);
     const branches = row.parent_id == null ? await Restaurant.findBranches(row.id) : [];
+    const responseRestaurant = rowWithOwner
+      ? {
+          ...Restaurant.toResponse(rowWithOwner),
+          owner_name: rowWithOwner.owner_name,
+          owner_phone: rowWithOwner.owner_phone,
+          owner_email: rowWithOwner.owner_email,
+        }
+      : Restaurant.toResponse(row);
     res.status(200).json({
       success: true,
       status: "OK",
       message: "Restaurant retrieved",
       data: {
-        restaurant: Restaurant.toResponse(row),
+        restaurant: responseRestaurant,
         branches: branches.map(Restaurant.toResponse),
       },
     });

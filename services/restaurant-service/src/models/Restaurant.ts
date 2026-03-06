@@ -112,6 +112,12 @@ export interface AdminRestaurantRow extends RestaurantRow {
   owner_email: string | null;
 }
 
+export interface RestaurantWithOwnerRow extends RestaurantRow {
+  owner_name: string | null;
+  owner_phone: string | null;
+  owner_email: string | null;
+}
+
 export interface AdminRestaurantStatsRow {
   total_restaurants: number;
   active_restaurants: number;
@@ -166,6 +172,21 @@ export async function create(params: CreateRestaurantParams): Promise<Restaurant
 
 export async function findById(id: string): Promise<RestaurantRow | null> {
   const r = await pool.query("SELECT * FROM restaurant.restaurants WHERE id = $1", [id]);
+  return r.rows[0] ?? null;
+}
+
+export async function findByIdWithOwner(id: string): Promise<RestaurantWithOwnerRow | null> {
+  const r = await pool.query(
+    `SELECT
+       rr.*,
+       u.full_name AS owner_name,
+       u.phone AS owner_phone,
+       u.email AS owner_email
+     FROM restaurant.restaurants rr
+     LEFT JOIN auth.users u ON u.id = rr.user_id
+     WHERE rr.id = $1`,
+    [id]
+  );
   return r.rows[0] ?? null;
 }
 
