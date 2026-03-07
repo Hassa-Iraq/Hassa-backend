@@ -138,10 +138,32 @@ export async function existsByEmail(email: string): Promise<boolean> {
   return result.rows.length > 0;
 }
 
+export async function existsByEmailExcludingId(
+  email: string,
+  userId: string
+): Promise<boolean> {
+  const result = await pool.query<{ id: string }>(
+    "SELECT id FROM auth.users WHERE email = $1 AND id <> $2",
+    [email, userId]
+  );
+  return result.rows.length > 0;
+}
+
 export async function existsByPhone(phone: string): Promise<boolean> {
   const result = await pool.query<{ id: string }>(
     "SELECT id FROM auth.users WHERE phone = $1",
     [phone]
+  );
+  return result.rows.length > 0;
+}
+
+export async function existsByPhoneExcludingId(
+  phone: string,
+  userId: string
+): Promise<boolean> {
+  const result = await pool.query<{ id: string }>(
+    "SELECT id FROM auth.users WHERE phone = $1 AND id <> $2",
+    [phone, userId]
   );
   return result.rows.length > 0;
 }
@@ -252,6 +274,44 @@ export async function updateProfile(
   );
 }
 
+export async function updateAdminManagedFields(
+  userId: string,
+  updates: {
+    email?: string;
+    phone?: string | null;
+    full_name?: string | null;
+    profile_picture_url?: string | null;
+  }
+): Promise<void> {
+  const set: string[] = [];
+  const values: unknown[] = [];
+  let i = 1;
+
+  if (updates.email !== undefined) {
+    set.push(`email = $${i++}`);
+    values.push(updates.email);
+  }
+  if (updates.phone !== undefined) {
+    set.push(`phone = $${i++}`);
+    values.push(updates.phone);
+  }
+  if (updates.full_name !== undefined) {
+    set.push(`full_name = $${i++}`);
+    values.push(updates.full_name);
+  }
+  if (updates.profile_picture_url !== undefined) {
+    set.push(`profile_picture_url = $${i++}`);
+    values.push(updates.profile_picture_url);
+  }
+  if (set.length === 0) return;
+
+  values.push(userId);
+  await pool.query(
+    `UPDATE auth.users SET ${set.join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = $${i}`,
+    values
+  );
+}
+
 export async function setPhoneVerified(userId: string, verified: boolean): Promise<void> {
   await pool.query(
     `UPDATE auth.users SET phone_verified = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
@@ -280,11 +340,14 @@ export default {
   findByIdWithPassword,
   findByIdForProfile,
   existsByEmail,
+  existsByEmailExcludingId,
   existsByPhone,
+  existsByPhoneExcludingId,
   create,
   createAdmin,
   updatePasswordHash,
   updateProfile,
+  updateAdminManagedFields,
   setPhoneVerified,
   setEmailVerified,
   deleteById,

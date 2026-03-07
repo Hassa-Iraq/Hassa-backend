@@ -1441,6 +1441,163 @@ export const getEmployeeById = async (req: AuthRequest, res: Response) => {
 };
 
 /**
+ * PATCH /auth/admin/employees/:id
+ * Body (all optional): { email?, phone?, full_name?, image_url?, is_active?, employee_role_id? }
+ */
+export const updateEmployeeByAdmin = async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id;
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Employee id is required",
+        data: null,
+      });
+    }
+
+    const employee = await EmployeeRole.findEmployeeById(id);
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        status: "ERROR",
+        message: "Employee not found",
+        data: null,
+      });
+    }
+
+    const { email, phone, full_name, image_url, is_active, employee_role_id } = req.body as {
+      email?: string;
+      phone?: string | null;
+      full_name?: string | null;
+      image_url?: string | null;
+      is_active?: boolean;
+      employee_role_id?: string;
+    };
+
+    if (
+      email === undefined &&
+      phone === undefined &&
+      full_name === undefined &&
+      image_url === undefined &&
+      is_active === undefined &&
+      employee_role_id === undefined
+    ) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message:
+          "Provide at least one field to update (email, phone, full_name, image_url, is_active, employee_role_id)",
+        data: null,
+      });
+    }
+
+    const userUpdates: {
+      email?: string;
+      phone?: string | null;
+      full_name?: string | null;
+      profile_picture_url?: string | null;
+    } = {};
+
+    if (email !== undefined) {
+      const normalizedEmail = trim(String(email)).toLowerCase();
+      if (!isValidEmail(normalizedEmail)) {
+        return res.status(400).json({
+          success: false,
+          status: "ERROR",
+          message: "Please provide a valid email address",
+          data: null,
+        });
+      }
+      if (await User.existsByEmailExcludingId(normalizedEmail, id)) {
+        return res.status(409).json({
+          success: false,
+          status: "ERROR",
+          message: "Email is already registered",
+          data: null,
+        });
+      }
+      userUpdates.email = normalizedEmail;
+    }
+
+    if (phone !== undefined) {
+      if (phone == null || trim(String(phone)) === "") {
+        userUpdates.phone = null;
+      } else {
+        const normalizedPhone = trim(String(phone)).startsWith("+")
+          ? trim(String(phone))
+          : "+" + trim(String(phone));
+        if (!validatePhoneFormat(normalizedPhone)) {
+          return res.status(400).json({
+            success: false,
+            status: "ERROR",
+            message: "Invalid phone number. Use E.164 format (e.g. +923001234567)",
+            data: null,
+          });
+        }
+        if (await User.existsByPhoneExcludingId(normalizedPhone, id)) {
+          return res.status(409).json({
+            success: false,
+            status: "ERROR",
+            message: "Phone number is already registered",
+            data: null,
+          });
+        }
+        userUpdates.phone = normalizedPhone;
+      }
+    }
+
+    if (full_name !== undefined) {
+      userUpdates.full_name = typeof full_name === "string" ? trim(full_name) || null : null;
+    }
+
+    if (image_url !== undefined) {
+      userUpdates.profile_picture_url = typeof image_url === "string" ? trim(image_url) || null : null;
+    }
+
+    if (Object.keys(userUpdates).length > 0) {
+      await User.updateAdminManagedFields(id, userUpdates);
+    }
+
+    if (is_active !== undefined) {
+      await EmployeeRole.updateEmployeeProfile(id, { is_active: Boolean(is_active) });
+    }
+
+    if (employee_role_id !== undefined) {
+      const nextRole = await EmployeeRole.findRoleById(employee_role_id);
+      if (!nextRole || !nextRole.is_active) {
+        return res.status(400).json({
+          success: false,
+          status: "ERROR",
+          message: "employee_role_id is invalid or inactive",
+          data: null,
+        });
+      }
+      await EmployeeRole.assignRoleToEmployee({
+        user_id: id,
+        employee_role_id,
+        assigned_by_admin_id: req.user?.id ?? null,
+      });
+    }
+
+    const updated = await EmployeeRole.findEmployeeById(id);
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Employee updated successfully",
+      data: { employee: updated },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to update employee",
+      data: null,
+    });
+  }
+};
+
+/**
  * PATCH /auth/admin/employees/:id/role
  * Body: { employee_role_id }
  */
