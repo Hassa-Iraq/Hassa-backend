@@ -38,6 +38,7 @@ router.patch("/admin/employee-roles/:id", authenticate, authorize("admin"), auth
 router.post("/admin/employees", authenticate, authorize("admin"), authController.addEmployee);
 router.get("/admin/employees", authenticate, authorize("admin"), authController.listEmployees);
 router.get("/admin/employees/:id", authenticate, authorize("admin"), authController.getEmployeeById);
+router.patch("/admin/employees/:id", authenticate, authorize("admin"), authController.updateEmployeeByAdmin);
 router.patch("/admin/employees/:id/role", authenticate, authorize("admin"), authController.assignEmployeeRole);
 router.patch("/admin/employees/:id/status", authenticate, authorize("admin"), authController.updateEmployeeStatus);
 
