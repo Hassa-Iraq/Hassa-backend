@@ -10,8 +10,9 @@ router.get("/health", async (_req: Request, res: Response) => {
     res.status(200).json({
       success: true,
       status: "OK",
-      message: "Order service is healthy",
+      message: "Service healthy",
       data: {
+        status: "healthy",
         service: "order-service",
         timestamp: new Date().toISOString(),
         database: "connected",
@@ -22,8 +23,9 @@ router.get("/health", async (_req: Request, res: Response) => {
     res.status(503).json({
       success: false,
       status: "ERROR",
-      message: "Order service is unhealthy",
+      message: "Service unhealthy",
       data: {
+        status: "unhealthy",
         service: "order-service",
         timestamp: new Date().toISOString(),
         database: "disconnected",
