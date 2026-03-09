@@ -15,7 +15,12 @@ export const UPLOAD_DIR = join(BASE_UPLOAD, "banners");
 
 function subdirForField(fieldname: string): string {
   if (fieldname === "banner_image") return "banners";
-  if (fieldname === "logo" || fieldname === "cover_image" || fieldname === "certificate") return "restaurants";
+  if (
+    fieldname === "logo" ||
+    fieldname === "cover_image" ||
+    fieldname === "certificate" ||
+    fieldname === "additional_certificate"
+  ) return "restaurants";
   if (fieldname === "item_image") return "menu-items";
   if (fieldname === "category_image") return "menu-categories";
   return "banners";
@@ -26,6 +31,7 @@ function prefixForField(fieldname: string): string {
   if (fieldname === "logo") return "logo";
   if (fieldname === "cover_image") return "cover";
   if (fieldname === "certificate") return "cert";
+  if (fieldname === "additional_certificate") return "additional-cert";
   if (fieldname === "item_image") return "item";
   if (fieldname === "category_image") return "category";
   return "file";
