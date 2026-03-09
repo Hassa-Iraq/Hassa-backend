@@ -2,7 +2,8 @@ import express, { Express } from "express";
 import cors from "cors";
 import healthRoutes from "./routes/health";
 import authRoutes from "./routes/auth";
-import { UPLOAD_DIR } from "./utils/fileUpload";
+import { BASE_UPLOAD_DIR } from "./utils/fileUpload";
+import { join } from "path";
 
 const app: Express = express();
 
@@ -25,7 +26,8 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/uploads/profile", express.static(UPLOAD_DIR));
+app.use("/uploads/profile", express.static(join(BASE_UPLOAD_DIR, "profile")));
+app.use("/uploads/drivers", express.static(join(BASE_UPLOAD_DIR, "drivers")));
 app.use("/", healthRoutes);
 app.use("/auth", authRoutes);
 

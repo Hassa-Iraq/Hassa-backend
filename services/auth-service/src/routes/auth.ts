@@ -41,6 +41,21 @@ router.get("/admin/employees/:id", authenticate, authorize("admin"), authControl
 router.patch("/admin/employees/:id", authenticate, authorize("admin"), authController.updateEmployeeByAdmin);
 router.patch("/admin/employees/:id/role", authenticate, authorize("admin"), authController.assignEmployeeRole);
 router.patch("/admin/employees/:id/status", authenticate, authorize("admin"), authController.updateEmployeeStatus);
+router.post("/drivers", authenticate, authorize("admin", "restaurant"), authController.addDriver);
+router.get("/drivers", authenticate, authorize("admin", "restaurant"), authController.listDrivers);
+router.get("/drivers/:id", authenticate, authorize("admin", "restaurant", "driver"), authController.getDriverById);
+router.patch("/drivers/:id", authenticate, authorize("admin", "restaurant"), authController.updateDriver);
+router.post(
+  "/drivers/upload-assets",
+  authenticate,
+  authorize("admin", "restaurant"),
+  upload.fields([
+    { name: "delivery_man_picture", maxCount: 1 },
+    { name: "vehicle_image", maxCount: 1 },
+    { name: "driving_license_picture", maxCount: 1 },
+  ]),
+  authController.uploadDriverAssets
+);
 
 router.post("/signup/request-otp", authController.signupRequestOtp);
 router.post("/signup/email/verify-otp", authController.signupEmailVerifyOtp);
