@@ -25,6 +25,7 @@ import { Pool } from "pg";
 import pool from "../db/connection";
 import { getFileUrl } from "../utils/fileUpload";
 import * as EmployeeRole from "../models/EmployeeRole";
+import * as DriverProfile from "../models/DriverProfile";
 
 /**
  * POST /auth/register
@@ -380,6 +381,18 @@ export const me = async (req: AuthRequest, res: Response) => {
           employee_is_active: boolean | null;
         }
       | null = null;
+    let driverData:
+      | {
+          owner_type: DriverProfile.DriverOwnerType;
+          owner_restaurant_id: string | null;
+          vehicle_type: string | null;
+          vehicle_number: string | null;
+          vehicle_image_url: string | null;
+          driving_license_image_url: string | null;
+          additional_data: Record<string, unknown>;
+          is_active: boolean;
+        }
+      | null = null;
 
     if ((user.role ?? "").toLowerCase() === "restaurant") {
       try {
@@ -430,6 +443,21 @@ export const me = async (req: AuthRequest, res: Response) => {
     if ((user.role ?? "").toLowerCase() === "employee") {
       employeeRoleData = await EmployeeRole.findEmployeeRoleForUser(user.id);
     }
+    if ((user.role ?? "").toLowerCase() === "driver") {
+      const driver = await DriverProfile.findDriverById(user.id);
+      if (driver) {
+        driverData = {
+          owner_type: driver.owner_type,
+          owner_restaurant_id: driver.owner_restaurant_id,
+          vehicle_type: driver.vehicle_type,
+          vehicle_number: driver.vehicle_number,
+          vehicle_image_url: driver.vehicle_image_url,
+          driving_license_image_url: driver.driving_license_image_url,
+          additional_data: driver.additional_data ?? {},
+          is_active: driver.is_active,
+        };
+      }
+    }
 
     return res.status(200).json({
       success: true,
@@ -440,6 +468,7 @@ export const me = async (req: AuthRequest, res: Response) => {
         restaurant: restaurantData?.primary_restaurant ?? null,
         restaurants: restaurantData?.restaurants ?? [],
         employee_role: employeeRoleData,
+        driver_profile: driverData,
       },
     });
   } catch (err) {
@@ -756,6 +785,64 @@ export const signupRequestOtp = async (req: AuthRequest, res: Response) => {
     });
   }
 };
+
+async function getOwnedRestaurantIds(userId: string): Promise<string[]> {
+  const r = await pool.query<{ id: string }>(
+    `SELECT id
+     FROM restaurant.restaurants
+     WHERE user_id = $1
+     ORDER BY (CASE WHEN parent_id IS NULL THEN 0 ELSE 1 END), created_at ASC`,
+    [userId]
+  );
+  return r.rows.map((row) => row.id);
+}
+
+async function resolveDriverOwnership(
+  req: AuthRequest,
+  res: Response,
+  requestedRestaurantId?: string
+): Promise<{ owner_type: DriverProfile.DriverOwnerType; owner_restaurant_id: string | null } | null> {
+  if (req.user?.role === "admin") {
+    if (requestedRestaurantId) {
+      return { owner_type: "restaurant", owner_restaurant_id: requestedRestaurantId };
+    }
+    return { owner_type: "platform", owner_restaurant_id: null };
+  }
+
+  if (req.user?.role !== "restaurant" || !req.user.id) {
+    res.status(403).json({
+      success: false,
+      status: "ERROR",
+      message: "Insufficient permissions",
+      data: null,
+    });
+    return null;
+  }
+
+  const ownedRestaurantIds = await getOwnedRestaurantIds(req.user.id);
+  if (ownedRestaurantIds.length === 0) {
+    res.status(400).json({
+      success: false,
+      status: "ERROR",
+      message: "No owned restaurants found for this user",
+      data: null,
+    });
+    return null;
+  }
+
+  const restaurantId = requestedRestaurantId ?? ownedRestaurantIds[0];
+  if (!restaurantId || !ownedRestaurantIds.includes(restaurantId)) {
+    res.status(403).json({
+      success: false,
+      status: "ERROR",
+      message: "You can only manage drivers for your own restaurant",
+      data: null,
+    });
+    return null;
+  }
+
+  return { owner_type: "restaurant", owner_restaurant_id: restaurantId };
+}
 
 /**
  * POST /auth/admin
@@ -1693,6 +1780,638 @@ export const updateEmployeeStatus = async (req: AuthRequest, res: Response) => {
       success: false,
       status: "ERROR",
       message: (err as Error).message || "Failed to update employee status",
+      data: null,
+    });
+  }
+};
+
+/**
+ * POST /auth/drivers
+ * Body: { email, password, phone, full_name?, image_url?, vehicle_type?, vehicle_number?, vehicle_image_url?, driving_license_image_url?, additional_data?, is_active?, restaurant_id? }
+ */
+export const addDriver = async (req: AuthRequest, res: Response) => {
+  try {
+    const {
+      email,
+      password,
+      phone,
+      full_name,
+      image_url,
+      vehicle_type,
+      vehicle_number,
+      vehicle_image_url,
+      driving_license_image_url,
+      additional_data,
+      is_active,
+      restaurant_id,
+    } = req.body as {
+      email?: string;
+      password?: string;
+      phone?: string;
+      full_name?: string;
+      image_url?: string;
+      vehicle_type?: string;
+      vehicle_number?: string;
+      vehicle_image_url?: string;
+      driving_license_image_url?: string;
+      additional_data?: Record<string, unknown>;
+      is_active?: boolean;
+      restaurant_id?: string;
+    };
+
+    if (!email || !password || !phone) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "email, password, and phone are required",
+        data: null,
+      });
+    }
+
+    const emailTrimmed = trim(email).toLowerCase();
+    if (!isValidEmail(emailTrimmed)) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Please provide a valid email address",
+        data: null,
+      });
+    }
+    if (!isValidPassword(password)) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Password must be at least 8 characters and contain one uppercase letter, one lowercase letter, and one number",
+        data: null,
+      });
+    }
+    const normalizedPhone = trim(String(phone)).startsWith("+") ? trim(String(phone)) : "+" + trim(String(phone));
+    if (!validatePhoneFormat(normalizedPhone)) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Invalid phone number. Use E.164 format (e.g. +923001234567)",
+        data: null,
+      });
+    }
+    if (additional_data !== undefined && (additional_data == null || typeof additional_data !== "object" || Array.isArray(additional_data))) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "additional_data must be an object",
+        data: null,
+      });
+    }
+
+    if (await User.existsByEmail(emailTrimmed)) {
+      return res.status(409).json({
+        success: false,
+        status: "ERROR",
+        message: "Email is already registered",
+        data: null,
+      });
+    }
+    if (await User.existsByPhone(normalizedPhone)) {
+      return res.status(409).json({
+        success: false,
+        status: "ERROR",
+        message: "Phone number is already registered",
+        data: null,
+      });
+    }
+
+    const ownership = await resolveDriverOwnership(req, res, typeof restaurant_id === "string" ? restaurant_id : undefined);
+    if (!ownership) return;
+
+    const roleRow = await Role.findByName("driver");
+    if (!roleRow) {
+      return res.status(500).json({
+        success: false,
+        status: "ERROR",
+        message: "Driver role not found in auth.roles",
+        data: null,
+      });
+    }
+
+    const passwordHash = await hashPassword(password);
+    const created = await User.create({
+      email: emailTrimmed,
+      phone: normalizedPhone,
+      full_name: typeof full_name === "string" ? trim(full_name) || null : null,
+      password_hash: passwordHash,
+      role_id: roleRow.id,
+      email_verified: true,
+      phone_verified: true,
+    });
+
+    try {
+      await DriverProfile.createDriverProfile({
+        user_id: created.id,
+        owner_type: ownership.owner_type,
+        owner_restaurant_id: ownership.owner_restaurant_id,
+        vehicle_type: typeof vehicle_type === "string" ? trim(vehicle_type) || null : null,
+        vehicle_number: typeof vehicle_number === "string" ? trim(vehicle_number) || null : null,
+        vehicle_image_url: typeof vehicle_image_url === "string" ? trim(vehicle_image_url) || null : null,
+        driving_license_image_url:
+          typeof driving_license_image_url === "string" ? trim(driving_license_image_url) || null : null,
+        additional_data: additional_data ?? {},
+        is_active: is_active !== undefined ? Boolean(is_active) : true,
+        created_by_user_id: req.user?.id ?? null,
+      });
+      if (image_url !== undefined) {
+        await User.updateProfile(created.id, {
+          profile_picture_url: typeof image_url === "string" ? trim(image_url) || null : null,
+        });
+      }
+    } catch (innerError) {
+      await User.deleteById(created.id);
+      throw innerError;
+    }
+
+    const driver = await DriverProfile.findDriverById(created.id);
+    return res.status(201).json({
+      success: true,
+      status: "OK",
+      message: "Driver created successfully",
+      data: { driver },
+    });
+  } catch (err) {
+    const pgError = err as { code?: string };
+    if (pgError.code === "23505") {
+      return res.status(409).json({
+        success: false,
+        status: "ERROR",
+        message: "Duplicate value detected (email/phone/vehicle number)",
+        data: null,
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to create driver",
+      data: null,
+    });
+  }
+};
+
+/**
+ * GET /auth/drivers
+ */
+export const listDrivers = async (req: AuthRequest, res: Response) => {
+  try {
+    const page = Math.max(1, parseInt(String(req.query.page)) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit)) || 20));
+    const offset = (page - 1) * limit;
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : undefined;
+    const ownerType =
+      typeof req.query.owner_type === "string" && ["platform", "restaurant"].includes(req.query.owner_type)
+        ? (req.query.owner_type as DriverProfile.DriverOwnerType)
+        : undefined;
+    const ownerRestaurantId =
+      typeof req.query.restaurant_id === "string" && req.query.restaurant_id.trim().length > 0
+        ? req.query.restaurant_id.trim()
+        : undefined;
+    const isActive =
+      typeof req.query.is_active === "string"
+        ? req.query.is_active.toLowerCase() === "true"
+        : undefined;
+
+    if (req.user?.role === "restaurant" && req.user.id) {
+      const ownedRestaurantIds = await getOwnedRestaurantIds(req.user.id);
+      if (ownedRestaurantIds.length === 0) {
+        return res.status(200).json({
+          success: true,
+          status: "OK",
+          message: "Drivers listed",
+          data: {
+            drivers: [],
+            pagination: { page, limit, total: 0, totalPages: 0 },
+          },
+        });
+      }
+      const drivers = await DriverProfile.listDrivers({
+        search,
+        owner_type: "restaurant",
+        owner_restaurant_ids: ownedRestaurantIds,
+        is_active: isActive,
+        limit,
+        offset,
+      });
+      const total = await DriverProfile.countDrivers({
+        search,
+        owner_type: "restaurant",
+        owner_restaurant_ids: ownedRestaurantIds,
+        is_active: isActive,
+      });
+      return res.status(200).json({
+        success: true,
+        status: "OK",
+        message: "Drivers listed",
+        data: {
+          drivers,
+          pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+        },
+      });
+    }
+
+    const drivers = await DriverProfile.listDrivers({
+      search,
+      owner_type: ownerType,
+      owner_restaurant_id: ownerRestaurantId,
+      is_active: isActive,
+      limit,
+      offset,
+    });
+    const total = await DriverProfile.countDrivers({
+      search,
+      owner_type: ownerType,
+      owner_restaurant_id: ownerRestaurantId,
+      is_active: isActive,
+    });
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Drivers listed",
+      data: {
+        drivers,
+        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to list drivers",
+      data: null,
+    });
+  }
+};
+
+/**
+ * GET /auth/drivers/:id
+ */
+export const getDriverById = async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id;
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Driver id is required",
+        data: null,
+      });
+    }
+    const driver = await DriverProfile.findDriverById(id);
+    if (!driver) {
+      return res.status(404).json({
+        success: false,
+        status: "ERROR",
+        message: "Driver not found",
+        data: null,
+      });
+    }
+
+    if (req.user?.role === "driver" && req.user.id !== id) {
+      return res.status(403).json({
+        success: false,
+        status: "ERROR",
+        message: "You do not have permission to view this driver",
+        data: null,
+      });
+    }
+
+    if (req.user?.role === "restaurant" && req.user.id) {
+      const ownedRestaurantIds = await getOwnedRestaurantIds(req.user.id);
+      if (!driver.owner_restaurant_id || !ownedRestaurantIds.includes(driver.owner_restaurant_id)) {
+        return res.status(403).json({
+          success: false,
+          status: "ERROR",
+          message: "You do not have permission to view this driver",
+          data: null,
+        });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Driver retrieved",
+      data: { driver },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to get driver",
+      data: null,
+    });
+  }
+};
+
+/**
+ * PATCH /auth/drivers/:id
+ */
+export const updateDriver = async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id;
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Driver id is required",
+        data: null,
+      });
+    }
+    const existing = await DriverProfile.findDriverById(id);
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        status: "ERROR",
+        message: "Driver not found",
+        data: null,
+      });
+    }
+
+    if (req.user?.role === "restaurant" && req.user.id) {
+      const ownedRestaurantIds = await getOwnedRestaurantIds(req.user.id);
+      if (!existing.owner_restaurant_id || !ownedRestaurantIds.includes(existing.owner_restaurant_id)) {
+        return res.status(403).json({
+          success: false,
+          status: "ERROR",
+          message: "You can only update your own restaurant drivers",
+          data: null,
+        });
+      }
+    }
+
+    const {
+      email,
+      phone,
+      full_name,
+      image_url,
+      vehicle_type,
+      vehicle_number,
+      vehicle_image_url,
+      driving_license_image_url,
+      additional_data,
+      is_active,
+      restaurant_id,
+    } = req.body as {
+      email?: string;
+      phone?: string | null;
+      full_name?: string | null;
+      image_url?: string | null;
+      vehicle_type?: string | null;
+      vehicle_number?: string | null;
+      vehicle_image_url?: string | null;
+      driving_license_image_url?: string | null;
+      additional_data?: Record<string, unknown>;
+      is_active?: boolean;
+      restaurant_id?: string | null;
+    };
+
+    if (
+      email === undefined &&
+      phone === undefined &&
+      full_name === undefined &&
+      image_url === undefined &&
+      vehicle_type === undefined &&
+      vehicle_number === undefined &&
+      vehicle_image_url === undefined &&
+      driving_license_image_url === undefined &&
+      additional_data === undefined &&
+      is_active === undefined &&
+      restaurant_id === undefined
+    ) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message:
+          "Provide at least one field to update (email, phone, full_name, image_url, vehicle_type, vehicle_number, vehicle_image_url, driving_license_image_url, additional_data, is_active, restaurant_id)",
+        data: null,
+      });
+    }
+
+    if (additional_data !== undefined && (additional_data == null || typeof additional_data !== "object" || Array.isArray(additional_data))) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "additional_data must be an object",
+        data: null,
+      });
+    }
+
+    const userUpdates: {
+      email?: string;
+      phone?: string | null;
+      full_name?: string | null;
+      profile_picture_url?: string | null;
+    } = {};
+    if (email !== undefined) {
+      const normalizedEmail = trim(String(email)).toLowerCase();
+      if (!isValidEmail(normalizedEmail)) {
+        return res.status(400).json({
+          success: false,
+          status: "ERROR",
+          message: "Please provide a valid email address",
+          data: null,
+        });
+      }
+      if (await User.existsByEmailExcludingId(normalizedEmail, id)) {
+        return res.status(409).json({
+          success: false,
+          status: "ERROR",
+          message: "Email is already registered",
+          data: null,
+        });
+      }
+      userUpdates.email = normalizedEmail;
+    }
+    if (phone !== undefined) {
+      if (phone == null || trim(String(phone)) === "") {
+        userUpdates.phone = null;
+      } else {
+        const normalizedPhone = trim(String(phone)).startsWith("+") ? trim(String(phone)) : "+" + trim(String(phone));
+        if (!validatePhoneFormat(normalizedPhone)) {
+          return res.status(400).json({
+            success: false,
+            status: "ERROR",
+            message: "Invalid phone number. Use E.164 format (e.g. +923001234567)",
+            data: null,
+          });
+        }
+        if (await User.existsByPhoneExcludingId(normalizedPhone, id)) {
+          return res.status(409).json({
+            success: false,
+            status: "ERROR",
+            message: "Phone number is already registered",
+            data: null,
+          });
+        }
+        userUpdates.phone = normalizedPhone;
+      }
+    }
+    if (full_name !== undefined) {
+      userUpdates.full_name = typeof full_name === "string" ? trim(full_name) || null : null;
+    }
+    if (image_url !== undefined) {
+      userUpdates.profile_picture_url = typeof image_url === "string" ? trim(image_url) || null : null;
+    }
+    if (Object.keys(userUpdates).length > 0) {
+      await User.updateAdminManagedFields(id, userUpdates);
+    }
+
+    const profileUpdates: Parameters<typeof DriverProfile.updateDriverProfile>[1] = {
+      vehicle_type: vehicle_type === undefined ? undefined : (typeof vehicle_type === "string" ? trim(vehicle_type) || null : null),
+      vehicle_number:
+        vehicle_number === undefined ? undefined : (typeof vehicle_number === "string" ? trim(vehicle_number) || null : null),
+      vehicle_image_url:
+        vehicle_image_url === undefined
+          ? undefined
+          : (typeof vehicle_image_url === "string" ? trim(vehicle_image_url) || null : null),
+      driving_license_image_url:
+        driving_license_image_url === undefined
+          ? undefined
+          : (typeof driving_license_image_url === "string" ? trim(driving_license_image_url) || null : null),
+      additional_data,
+      is_active: is_active === undefined ? undefined : Boolean(is_active),
+    };
+
+    if (restaurant_id !== undefined) {
+      if (req.user?.role === "restaurant") {
+        return res.status(403).json({
+          success: false,
+          status: "ERROR",
+          message: "Restaurant users cannot move driver ownership",
+          data: null,
+        });
+      }
+      if (restaurant_id === null || (typeof restaurant_id === "string" && restaurant_id.trim() === "")) {
+        profileUpdates.owner_type = "platform";
+        profileUpdates.owner_restaurant_id = null;
+      } else if (typeof restaurant_id === "string") {
+        profileUpdates.owner_type = "restaurant";
+        profileUpdates.owner_restaurant_id = restaurant_id.trim();
+      }
+    }
+
+    await DriverProfile.updateDriverProfile(id, profileUpdates);
+    const updated = await DriverProfile.findDriverById(id);
+
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Driver updated successfully",
+      data: { driver: updated },
+    });
+  } catch (err) {
+    const pgError = err as { code?: string };
+    if (pgError.code === "23505") {
+      return res.status(409).json({
+        success: false,
+        status: "ERROR",
+        message: "Vehicle number already exists",
+        data: null,
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to update driver",
+      data: null,
+    });
+  }
+};
+
+/**
+ * POST /auth/drivers/upload-assets
+ * multipart form-data fields: delivery_man_picture, vehicle_image, driving_license_picture
+ * optional: save_to_driver=true, driver_user_id=<uuid>
+ */
+export const uploadDriverAssets = async (req: AuthRequest, res: Response) => {
+  try {
+    const files = (req.files as Record<string, Express.Multer.File[]> | undefined) ?? {};
+    const driverPicture = files.delivery_man_picture?.[0];
+    const vehicleImage = files.vehicle_image?.[0];
+    const licensePicture = files.driving_license_picture?.[0];
+
+    if (!driverPicture && !vehicleImage && !licensePicture) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Upload at least one file: delivery_man_picture, vehicle_image, driving_license_picture",
+        data: null,
+      });
+    }
+
+    const saveToDriverRaw = req.body.save_to_driver;
+    const saveToDriver =
+      saveToDriverRaw === true || String(saveToDriverRaw ?? "").toLowerCase() === "true";
+    const driverUserId =
+      typeof req.body.driver_user_id === "string" && req.body.driver_user_id.trim().length > 0
+        ? req.body.driver_user_id.trim()
+        : undefined;
+
+    if (saveToDriver) {
+      if (!driverUserId) {
+        return res.status(400).json({
+          success: false,
+          status: "ERROR",
+          message: "driver_user_id is required when save_to_driver=true",
+          data: null,
+        });
+      }
+      const driver = await DriverProfile.findDriverById(driverUserId);
+      if (!driver) {
+        return res.status(404).json({
+          success: false,
+          status: "ERROR",
+          message: "Driver not found",
+          data: null,
+        });
+      }
+      if (req.user?.role === "restaurant" && req.user.id) {
+        const ownedRestaurantIds = await getOwnedRestaurantIds(req.user.id);
+        if (!driver.owner_restaurant_id || !ownedRestaurantIds.includes(driver.owner_restaurant_id)) {
+          return res.status(403).json({
+            success: false,
+            status: "ERROR",
+            message: "You can only update assets for your own restaurant drivers",
+            data: null,
+          });
+        }
+      }
+
+      if (driverPicture) {
+        await User.updateProfile(driverUserId, {
+          profile_picture_url: getFileUrl(driverPicture.filename, driverPicture.fieldname),
+        });
+      }
+      await DriverProfile.updateDriverProfile(driverUserId, {
+        vehicle_image_url: vehicleImage ? getFileUrl(vehicleImage.filename, vehicleImage.fieldname) : undefined,
+        driving_license_image_url: licensePicture ? getFileUrl(licensePicture.filename, licensePicture.fieldname) : undefined,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Driver assets uploaded successfully",
+      data: {
+        delivery_man_picture_url: driverPicture
+          ? getFileUrl(driverPicture.filename, driverPicture.fieldname)
+          : null,
+        vehicle_image_url: vehicleImage ? getFileUrl(vehicleImage.filename, vehicleImage.fieldname) : null,
+        driving_license_picture_url: licensePicture
+          ? getFileUrl(licensePicture.filename, licensePicture.fieldname)
+          : null,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to upload driver assets",
       data: null,
     });
   }
