@@ -41,12 +41,13 @@ export async function uploadRestaurantAssets(req: AuthRequest, res: Response): P
     const logo = files.logo?.[0];
     const cover = files.cover_image?.[0];
     const certificate = files.certificate?.[0];
+    const additionalCertificate = files.additional_certificate?.[0];
 
-    if (!logo && !cover && !certificate) {
+    if (!logo && !cover && !certificate && !additionalCertificate) {
       res.status(400).json({
         success: false,
         status: "ERROR",
-        message: "Upload at least one file: logo, cover_image, or certificate",
+        message: "Upload at least one file: logo, cover_image, certificate, or additional_certificate",
         data: null,
       });
       return;
@@ -60,6 +61,9 @@ export async function uploadRestaurantAssets(req: AuthRequest, res: Response): P
         logo_url: logo ? getFileUrl(logo.filename, logo.fieldname) : null,
         cover_image_url: cover ? getFileUrl(cover.filename, cover.fieldname) : null,
         certificate_url: certificate ? getFileUrl(certificate.filename, certificate.fieldname) : null,
+        additional_certificate_url: additionalCertificate
+          ? getFileUrl(additionalCertificate.filename, additionalCertificate.fieldname)
+          : null,
       },
     });
   } catch (err) {

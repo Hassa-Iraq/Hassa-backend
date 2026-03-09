@@ -18,6 +18,7 @@ router.post(
     { name: "logo", maxCount: 1 },
     { name: "cover_image", maxCount: 1 },
     { name: "certificate", maxCount: 1 },
+    { name: "additional_certificate", maxCount: 1 },
   ]),
   restaurantController.uploadRestaurantAssets
 );
