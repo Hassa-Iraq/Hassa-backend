@@ -887,7 +887,7 @@ export async function approveRestaurant(req: AuthRequest, res: Response): Promis
 export async function blockRestaurant(req: AuthRequest, res: Response): Promise<void> {
   try {
     const id = req.params.id as string;
-    const row = await Restaurant.findById(id);
+    const row = await ensureOwnership(req, res, id, { allowAdmin: true });
     if (!row) {
       res.status(404).json({ success: false, status: "ERROR", message: "Restaurant not found", data: null });
       return;
@@ -918,7 +918,7 @@ export async function blockRestaurant(req: AuthRequest, res: Response): Promise<
 export async function unblockRestaurant(req: AuthRequest, res: Response): Promise<void> {
   try {
     const id = req.params.id as string;
-    const row = await Restaurant.findById(id);
+    const row = await ensureOwnership(req, res, id, { allowAdmin: true });
     if (!row) {
       res.status(404).json({ success: false, status: "ERROR", message: "Restaurant not found", data: null });
       return;
