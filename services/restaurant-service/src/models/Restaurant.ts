@@ -62,6 +62,9 @@ export interface CreateRestaurantParams {
   free_delivery_max_amount?: number | null;
   free_delivery_min_distance_km?: number | null;
   description?: string | null;
+  is_active?: boolean;
+  is_open?: boolean;
+  is_blocked?: boolean;
 }
 
 export interface UpdateRestaurantParams {
@@ -162,9 +165,9 @@ export async function create(params: CreateRestaurantParams): Promise<Restaurant
       params.free_delivery_max_amount ?? null,
       params.free_delivery_min_distance_km ?? null,
       params.description ?? null,
-      false,
-      false,
-      false,
+      params.is_active ?? false,
+      params.is_open ?? false,
+      params.is_blocked ?? false,
     ]
   );
   return r.rows[0];

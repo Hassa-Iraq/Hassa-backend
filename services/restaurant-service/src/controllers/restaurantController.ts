@@ -220,19 +220,16 @@ export async function createRestaurantByAdmin(req: AuthRequest, res: Response): 
       free_delivery_max_amount: typeof body.free_delivery_max_amount === "number" ? body.free_delivery_max_amount : null,
       free_delivery_min_distance_km: typeof body.free_delivery_min_distance_km === "number" ? body.free_delivery_min_distance_km : null,
       description: (body.description as string) ?? null,
-    });
-
-    const activated = await Restaurant.update(created.id, {
       is_active: true,
-      is_blocked: false,
       is_open: false,
+      is_blocked: false,
     });
 
     res.status(201).json({
       success: true,
       status: "OK",
       message: "Restaurant onboarded successfully by admin",
-      data: { restaurant: Restaurant.toResponse(activated ?? created) },
+      data: { restaurant: Restaurant.toResponse(created) },
     });
   } catch (err) {
     res.status(500).json({
@@ -372,12 +369,9 @@ export async function onboardRestaurantByAdmin(req: AuthRequest, res: Response):
             ? restaurantInput.free_delivery_min_distance_km
             : null,
         description: (restaurantInput.description as string) ?? null,
-      });
-
-      const activated = await Restaurant.update(created.id, {
         is_active: true,
-        is_blocked: false,
         is_open: false,
+        is_blocked: false,
       });
 
       res.status(201).json({
@@ -386,7 +380,7 @@ export async function onboardRestaurantByAdmin(req: AuthRequest, res: Response):
         message: "Restaurant owner + restaurant onboarded successfully",
         data: {
           owner: ownerData.data.user,
-          restaurant: Restaurant.toResponse(activated ?? created),
+          restaurant: Restaurant.toResponse(created),
         },
       });
     } catch (err) {
@@ -560,19 +554,16 @@ export async function createBranchByAdmin(req: AuthRequest, res: Response): Prom
       free_delivery_max_amount: typeof body.free_delivery_max_amount === "number" ? body.free_delivery_max_amount : null,
       free_delivery_min_distance_km: typeof body.free_delivery_min_distance_km === "number" ? body.free_delivery_min_distance_km : null,
       description: (body.description as string) ?? null,
-    });
-
-    const activated = await Restaurant.update(row.id, {
       is_active: true,
-      is_blocked: false,
       is_open: false,
+      is_blocked: false,
     });
 
     res.status(201).json({
       success: true,
       status: "OK",
       message: "Branch created successfully by admin",
-      data: { restaurant: Restaurant.toResponse(activated ?? row) },
+      data: { restaurant: Restaurant.toResponse(row) },
     });
   } catch (err) {
     res.status(500).json({
