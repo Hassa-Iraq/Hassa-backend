@@ -1,21 +1,18 @@
-import app from './app';
-import config from './config/index';
-import { createLogger } from 'shared/logger/index';
-
-const logger = createLogger(config.SERVICE_NAME, config.LOG_LEVEL);
+import app from "./app";
+import config from "./config/index";
 
 const PORT = config.PORT || 3004;
 
 app.listen(PORT, () => {
-  logger.info({ port: PORT, env: config.NODE_ENV }, 'Delivery service started');
+  console.info(`Delivery service started on port ${PORT} in ${config.NODE_ENV} mode`);
 });
 
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, shutting down gracefully');
+process.on("SIGTERM", () => {
+  console.info("SIGTERM received, shutting down gracefully");
   process.exit(0);
 });
 
-process.on('SIGINT', () => {
-  logger.info('SIGINT received, shutting down gracefully');
+process.on("SIGINT", () => {
+  console.info("SIGINT received, shutting down gracefully");
   process.exit(0);
 });

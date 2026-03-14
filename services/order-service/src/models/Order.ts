@@ -87,6 +87,28 @@ export interface ListOrdersFilters {
   date_to?: string;
 }
 
+export interface ListCustomersFilters {
+  limit: number;
+  offset: number;
+  search?: string;
+  restaurant_id?: string;
+  restaurant_ids?: string[];
+  date_from?: string;
+  date_to?: string;
+}
+
+export interface CustomerSummaryRow {
+  user_id: string;
+  full_name: string | null;
+  email: string;
+  phone: string | null;
+  profile_picture_url: string | null;
+  total_orders: number;
+  total_spent: string;
+  first_order_at: Date;
+  last_order_at: Date;
+}
+
 function buildWhere(filters: ListOrdersFilters): { where: string; values: unknown[] } {
   const conditions: string[] = [];
   const values: unknown[] = [];
@@ -123,6 +145,44 @@ function buildWhere(filters: ListOrdersFilters): { where: string; values: unknow
 
   return {
     where: conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "",
+    values,
+  };
+}
+
+function buildCustomersWhere(filters: ListCustomersFilters): { where: string; values: unknown[] } {
+  const conditions: string[] = ["r.name = 'customer'"];
+  const values: unknown[] = [];
+  let i = 1;
+
+  if (filters.search) {
+    conditions.push(`(
+      u.id::text ILIKE $${i}
+      OR u.email ILIKE $${i}
+      OR u.phone ILIKE $${i}
+      OR u.full_name ILIKE $${i}
+    )`);
+    values.push(filters.search);
+    i += 1;
+  }
+  if (filters.restaurant_id) {
+    conditions.push(`o.restaurant_id = $${i++}`);
+    values.push(filters.restaurant_id);
+  }
+  if (filters.restaurant_ids && filters.restaurant_ids.length > 0) {
+    conditions.push(`o.restaurant_id = ANY($${i++})`);
+    values.push(filters.restaurant_ids);
+  }
+  if (filters.date_from) {
+    conditions.push(`o.created_at >= $${i++}`);
+    values.push(filters.date_from);
+  }
+  if (filters.date_to) {
+    conditions.push(`o.created_at <= $${i++}`);
+    values.push(filters.date_to);
+  }
+
+  return {
+    where: `WHERE ${conditions.join(" AND ")}`,
     values,
   };
 }
@@ -221,6 +281,52 @@ export async function count(filters: Omit<ListOrdersFilters, "limit" | "offset">
     `SELECT COUNT(*)::int AS total
      FROM orders.orders o
      ${where.where}`,
+    where.values
+  );
+  return r.rows[0]?.total ?? 0;
+}
+
+export async function listCustomers(filters: ListCustomersFilters): Promise<CustomerSummaryRow[]> {
+  const where = buildCustomersWhere(filters);
+  const values = [...where.values, filters.limit, filters.offset];
+  const limitPlaceholder = `$${where.values.length + 1}`;
+  const offsetPlaceholder = `$${where.values.length + 2}`;
+
+  const r = await pool.query(
+    `SELECT
+       u.id AS user_id,
+       u.full_name,
+       u.email,
+       u.phone,
+       u.profile_picture_url,
+       COUNT(DISTINCT o.id)::int AS total_orders,
+       COALESCE(SUM(o.total_amount), 0)::numeric::text AS total_spent,
+       MIN(o.created_at) AS first_order_at,
+       MAX(o.created_at) AS last_order_at
+     FROM orders.orders o
+     JOIN auth.users u ON u.id = o.user_id
+     JOIN auth.roles r ON r.id = u.role_id
+     ${where.where}
+     GROUP BY u.id, u.full_name, u.email, u.phone, u.profile_picture_url
+     ORDER BY MAX(o.created_at) DESC
+     LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,
+    values
+  );
+  return r.rows as CustomerSummaryRow[];
+}
+
+export async function countCustomers(filters: Omit<ListCustomersFilters, "limit" | "offset">): Promise<number> {
+  const where = buildCustomersWhere({ ...filters, limit: 1, offset: 0 });
+  const r = await pool.query(
+    `SELECT COUNT(*)::int AS total
+     FROM (
+       SELECT o.user_id
+       FROM orders.orders o
+       JOIN auth.users u ON u.id = o.user_id
+       JOIN auth.roles r ON r.id = u.role_id
+       ${where.where}
+       GROUP BY o.user_id
+     ) x`,
     where.values
   );
   return r.rows[0]?.total ?? 0;

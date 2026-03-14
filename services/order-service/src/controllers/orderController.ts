@@ -438,6 +438,100 @@ export async function listOrders(req: AuthRequest, res: Response): Promise<void>
   }
 }
 
+export async function listCustomers(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const page = Math.max(1, parseInt(String(req.query.page)) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit)) || 20));
+    const offset = (page - 1) * limit;
+    const rawSearch = typeof req.query.search === "string" ? req.query.search.trim() : "";
+    const search = rawSearch
+      ? `%${rawSearch.replace(/%/g, "\\%").replace(/_/g, "\\_")}%`
+      : undefined;
+    const dateFrom = typeof req.query.date_from === "string" ? req.query.date_from : undefined;
+    const dateTo = typeof req.query.date_to === "string" ? req.query.date_to : undefined;
+
+    const filters: Order.ListCustomersFilters = {
+      limit,
+      offset,
+      search,
+      date_from: dateFrom,
+      date_to: dateTo,
+    };
+
+    if (req.user?.role === "restaurant") {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        res.status(401).json({
+          success: false,
+          status: "ERROR",
+          message: "Authorization header missing",
+          data: null,
+        });
+        return;
+      }
+      const ownedRestaurantIds = await getOwnedRestaurantIds(authHeader);
+      if (ownedRestaurantIds.length === 0) {
+        res.status(200).json({
+          success: true,
+          status: "OK",
+          message: "Customers listed",
+          data: {
+            customers: [],
+            pagination: { page, limit, total: 0, totalPages: 0 },
+          },
+        });
+        return;
+      }
+      filters.restaurant_ids = ownedRestaurantIds;
+    } else if (typeof req.query.restaurant_id === "string") {
+      filters.restaurant_id = req.query.restaurant_id;
+    }
+
+    const rows = await Order.listCustomers(filters);
+    const total = await Order.countCustomers({
+      search: filters.search,
+      restaurant_id: filters.restaurant_id,
+      restaurant_ids: filters.restaurant_ids,
+      date_from: filters.date_from,
+      date_to: filters.date_to,
+    });
+
+    const customers = rows.map((row) => ({
+      user_id: row.user_id,
+      full_name: row.full_name,
+      email: row.email,
+      phone: row.phone,
+      profile_picture_url: row.profile_picture_url,
+      total_orders: row.total_orders,
+      total_spent: parseFloat(row.total_spent),
+      first_order_at: row.first_order_at,
+      last_order_at: row.last_order_at,
+    }));
+
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Customers listed",
+      data: {
+        customers,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to list customers",
+      data: null,
+    });
+  }
+}
+
 export async function updateOrderStatus(req: AuthRequest, res: Response): Promise<void> {
   try {
     const id = req.params.id as string;
