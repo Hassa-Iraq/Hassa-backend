@@ -64,4 +64,9 @@ router.post("/forgot-password", authController.forgotPassword);
 router.post("/forgot-password/verify-otp", authController.verifyForgotPasswordOtp);
 router.post("/reset-password", authController.resetPassword);
 
+router.get("/addresses", authenticate, authorize("customer", "admin"), authController.listAddresses);
+router.post("/addresses", authenticate, authorize("customer", "admin"), authController.createAddress);
+router.patch("/addresses/:id", authenticate, authorize("customer", "admin"), authController.updateAddress);
+router.delete("/addresses/:id", authenticate, authorize("customer", "admin"), authController.deleteAddress);
+
 export default router;

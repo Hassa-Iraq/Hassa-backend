@@ -26,6 +26,7 @@ import pool from "../db/connection";
 import { getFileUrl } from "../utils/fileUpload";
 import * as EmployeeRole from "../models/EmployeeRole";
 import * as DriverProfile from "../models/DriverProfile";
+import * as Address from "../models/Address";
 
 /**
  * POST /auth/register
@@ -2709,6 +2710,251 @@ export const resetPassword = async (req: AuthRequest, res: Response) => {
       success: false,
       status: "ERROR",
       message: (err as Error).message || "Failed to reset password",
+      data: null,
+    });
+  }
+};
+
+/**
+ * GET /auth/addresses
+ */
+export const listAddresses = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({
+        success: false,
+        status: "ERROR",
+        message: "Authentication required",
+        data: null,
+      });
+    }
+
+    const rows = await Address.listByUserId(req.user.id);
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Addresses listed",
+      data: {
+        addresses: rows.map(Address.toResponse),
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to list addresses",
+      data: null,
+    });
+  }
+};
+
+/**
+ * POST /auth/addresses
+ */
+export const createAddress = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({
+        success: false,
+        status: "ERROR",
+        message: "Authentication required",
+        data: null,
+      });
+    }
+
+    const {
+      complete_address,
+      category,
+      landmark,
+      location_details,
+      latitude,
+      longitude,
+      is_default,
+    } = req.body as Record<string, unknown>;
+
+    if (!complete_address || typeof complete_address !== "string" || complete_address.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "complete_address is required",
+        data: null,
+      });
+    }
+
+    const created = await Address.create({
+      user_id: req.user.id,
+      complete_address: complete_address.trim(),
+      category: typeof category === "string" && category.trim().length > 0 ? category.trim() : "Other",
+      landmark: typeof landmark === "string" ? landmark.trim() || null : null,
+      location_details:
+        typeof location_details === "string" ? location_details.trim() || null : null,
+      latitude: typeof latitude === "number" ? latitude : null,
+      longitude: typeof longitude === "number" ? longitude : null,
+      is_default: Boolean(is_default),
+    });
+
+    return res.status(201).json({
+      success: true,
+      status: "OK",
+      message: "Address created successfully",
+      data: {
+        address: Address.toResponse(created),
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to create address",
+      data: null,
+    });
+  }
+};
+
+/**
+ * PATCH /auth/addresses/:id
+ */
+export const updateAddress = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({
+        success: false,
+        status: "ERROR",
+        message: "Authentication required",
+        data: null,
+      });
+    }
+
+    const id = req.params.id;
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Address id is required",
+        data: null,
+      });
+    }
+
+    const body = req.body as Record<string, unknown>;
+    const updates: Address.UpdateAddressInput = {};
+
+    if (body.complete_address !== undefined) {
+      if (typeof body.complete_address !== "string" || body.complete_address.trim().length === 0) {
+        return res.status(400).json({
+          success: false,
+          status: "ERROR",
+          message: "complete_address must be a non-empty string",
+          data: null,
+        });
+      }
+      updates.complete_address = body.complete_address.trim();
+    }
+    if (body.category !== undefined) {
+      updates.category =
+        typeof body.category === "string" && body.category.trim().length > 0 ? body.category.trim() : "Other";
+    }
+    if (body.landmark !== undefined) {
+      updates.landmark = typeof body.landmark === "string" ? body.landmark.trim() || null : null;
+    }
+    if (body.location_details !== undefined) {
+      updates.location_details =
+        typeof body.location_details === "string"
+          ? body.location_details.trim() || null
+          : null;
+    }
+    if (body.latitude !== undefined) {
+      updates.latitude = typeof body.latitude === "number" ? body.latitude : null;
+    }
+    if (body.longitude !== undefined) {
+      updates.longitude = typeof body.longitude === "number" ? body.longitude : null;
+    }
+    if (body.is_default !== undefined) {
+      updates.is_default = Boolean(body.is_default);
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message:
+          "Provide at least one field to update (complete_address, category, landmark, location_details, latitude, longitude, is_default)",
+        data: null,
+      });
+    }
+
+    const updated = await Address.updateForUser(id, req.user.id, updates);
+    if (!updated) {
+      return res.status(404).json({
+        success: false,
+        status: "ERROR",
+        message: "Address not found",
+        data: null,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Address updated successfully",
+      data: {
+        address: Address.toResponse(updated),
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to update address",
+      data: null,
+    });
+  }
+};
+
+/**
+ * DELETE /auth/addresses/:id
+ */
+export const deleteAddress = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({
+        success: false,
+        status: "ERROR",
+        message: "Authentication required",
+        data: null,
+      });
+    }
+
+    const id = req.params.id;
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Address id is required",
+        data: null,
+      });
+    }
+
+    const deleted = await Address.deleteForUser(id, req.user.id);
+    if (!deleted) {
+      return res.status(404).json({
+        success: false,
+        status: "ERROR",
+        message: "Address not found",
+        data: null,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Address deleted successfully",
+      data: null,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to delete address",
       data: null,
     });
   }
