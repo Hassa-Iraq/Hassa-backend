@@ -76,16 +76,27 @@ if (!databaseUrl || typeof databaseUrl !== "string") {
 
 const args = process.argv.slice(2);
 const command = args[0] || "up";
+let extraArgs = args.slice(1);
+
+if (
+  (command === "up" || command === "down") &&
+  extraArgs.length > 0 &&
+  !extraArgs[0].startsWith("--")
+) {
+  const possibleCount = Number(extraArgs[0]);
+  const isCount = Number.isInteger(possibleCount) && possibleCount >= 0;
+  if (!isCount) {
+    extraArgs = ["--to", extraArgs[0], ...extraArgs.slice(1)];
+  }
+}
 
 const migrationsDir = join(rootDir, "database", "migrations");
 
 const childEnv = { ...process.env, DATABASE_URL: databaseUrl };
 
 try {
-  const migrateConfig = `--migrations-dir "${migrationsDir}"`;
-  const fullCommand = `node-pg-migrate ${command} ${migrateConfig} ${args
-    .slice(1)
-    .join(" ")}`.trim();
+  const migrateConfig = `--migrations-dir "${migrationsDir}" --migration-filename-format utc`;
+  const fullCommand = `node-pg-migrate ${command} ${migrateConfig} ${extraArgs.join(" ")}`.trim();
 
   execSync(fullCommand, {
     stdio: "inherit",
