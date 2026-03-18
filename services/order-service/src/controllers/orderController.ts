@@ -279,12 +279,28 @@ export async function getOrderById(req: AuthRequest, res: Response): Promise<voi
     const order = await ensureOrderAccess(req, res, id);
     if (!order) return;
 
-    const items = await Order.findItemsByOrderId(order.id);
+    const details = await Order.findDetailsById(order.id);
+    if (!details) {
+      res.status(404).json({
+        success: false,
+        status: "ERROR",
+        message: "Order not found",
+        data: null,
+      });
+      return;
+    }
     res.status(200).json({
       success: true,
       status: "OK",
       message: "Order retrieved",
-      data: { order: Order.toResponse(order, items) },
+      data: {
+        order: Order.toDetailsResponse(
+          details.order,
+          details.items,
+          details.customer,
+          details.restaurant
+        ),
+      },
     });
   } catch (err) {
     res.status(500).json({

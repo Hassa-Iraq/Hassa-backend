@@ -47,6 +47,45 @@ export interface OrderItemRow {
   created_at: Date;
 }
 
+export interface OrderCustomerInfo {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  profile_picture_url: string | null;
+}
+
+export interface OrderRestaurantInfo {
+  id: string;
+  name: string | null;
+  address: string | null;
+  zone: string | null;
+  cuisine: string | null;
+  logo_url: string | null;
+  cover_image_url: string | null;
+  is_open: boolean | null;
+}
+
+export interface EnrichedOrderItemRow extends OrderItemRow {
+  menu_name: string | null;
+  menu_description: string | null;
+  menu_image_url: string | null;
+  category_id: string | null;
+  category_name: string | null;
+  subcategory_id: string | null;
+  subcategory_name: string | null;
+  menu_nutrition: Record<string, unknown> | null;
+  menu_search_tags: string[] | null;
+  menu_is_available: boolean | null;
+}
+
+export interface OrderDetailsRecord {
+  order: OrderRow;
+  items: EnrichedOrderItemRow[];
+  customer: OrderCustomerInfo | null;
+  restaurant: OrderRestaurantInfo | null;
+}
+
 export interface CreateOrderItemInput {
   menu_item_id: string;
   item_name: string;
@@ -258,6 +297,122 @@ export async function findItemsByOrderId(order_id: string): Promise<OrderItemRow
   return r.rows as OrderItemRow[];
 }
 
+export async function findEnrichedItemsByOrderId(order_id: string): Promise<EnrichedOrderItemRow[]> {
+  const result = await pool.query<EnrichedOrderItemRow>(
+    `SELECT
+       oi.*,
+       mi.name AS menu_name,
+       mi.description AS menu_description,
+       mi.image_url AS menu_image_url,
+       c.id AS category_id,
+       c.name AS category_name,
+       sc.id AS subcategory_id,
+       sc.name AS subcategory_name,
+       mi.nutrition AS menu_nutrition,
+       mi.search_tags AS menu_search_tags,
+       mi.is_available AS menu_is_available
+     FROM orders.order_items oi
+     LEFT JOIN restaurant.menu_items mi ON mi.id = oi.menu_item_id
+     LEFT JOIN restaurant.menu_categories c ON c.id = mi.category_id
+     LEFT JOIN restaurant.menu_categories sc ON sc.id = mi.subcategory_id
+     WHERE oi.order_id = $1
+     ORDER BY oi.created_at ASC`,
+    [order_id]
+  );
+  return result.rows;
+}
+
+export async function findDetailsById(id: string): Promise<OrderDetailsRecord | null> {
+  const orderResult = await pool.query<
+    OrderRow & {
+      customer_full_name: string | null;
+      customer_email: string | null;
+      customer_phone: string | null;
+      customer_profile_picture_url: string | null;
+      restaurant_name: string | null;
+      restaurant_address: string | null;
+      restaurant_zone: string | null;
+      restaurant_cuisine: string | null;
+      restaurant_logo_url: string | null;
+      restaurant_cover_image_url: string | null;
+      restaurant_is_open: boolean | null;
+    }
+  >(
+    `SELECT
+       o.*,
+       u.full_name AS customer_full_name,
+       u.email AS customer_email,
+       u.phone AS customer_phone,
+       u.profile_picture_url AS customer_profile_picture_url,
+       r.name AS restaurant_name,
+       r.address AS restaurant_address,
+       r.zone AS restaurant_zone,
+       r.cuisine AS restaurant_cuisine,
+       r.logo_url AS restaurant_logo_url,
+       r.cover_image_url AS restaurant_cover_image_url,
+       r.is_open AS restaurant_is_open
+     FROM orders.orders o
+     LEFT JOIN auth.users u ON u.id = o.user_id
+     LEFT JOIN restaurant.restaurants r ON r.id = o.restaurant_id
+     WHERE o.id = $1`,
+    [id]
+  );
+
+  const row = orderResult.rows[0];
+  if (!row) return null;
+
+  const items = await findEnrichedItemsByOrderId(id);
+  const order: OrderRow = {
+    id: row.id,
+    order_number: row.order_number,
+    user_id: row.user_id,
+    restaurant_id: row.restaurant_id,
+    status: row.status,
+    subtotal: row.subtotal,
+    delivery_fee: row.delivery_fee,
+    tax_amount: row.tax_amount,
+    discount_amount: row.discount_amount,
+    total_amount: row.total_amount,
+    currency: row.currency,
+    notes: row.notes,
+    delivery_address: row.delivery_address,
+    placed_at: row.placed_at,
+    confirmed_at: row.confirmed_at,
+    preparing_at: row.preparing_at,
+    ready_for_pickup_at: row.ready_for_pickup_at,
+    out_for_delivery_at: row.out_for_delivery_at,
+    delivered_at: row.delivered_at,
+    cancelled_at: row.cancelled_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+
+  const customer: OrderCustomerInfo | null = row.user_id
+    ? {
+        id: row.user_id,
+        full_name: row.customer_full_name,
+        email: row.customer_email,
+        phone: row.customer_phone,
+        profile_picture_url: row.customer_profile_picture_url,
+      }
+    : null;
+
+  const restaurant: OrderRestaurantInfo | null = row.restaurant_id
+    ? {
+        id: row.restaurant_id,
+        name: row.restaurant_name,
+        address: row.restaurant_address,
+        zone: row.restaurant_zone,
+        cuisine: row.restaurant_cuisine,
+        logo_url: row.restaurant_logo_url,
+        cover_image_url: row.restaurant_cover_image_url,
+        is_open: row.restaurant_is_open,
+      }
+    : null;
+
+  return { order, items, customer, restaurant };
+}
+
 export async function list(filters: ListOrdersFilters): Promise<OrderRow[]> {
   const where = buildWhere(filters);
   const values = [...where.values, filters.limit, filters.offset];
@@ -392,5 +547,48 @@ export function toResponse(order: OrderRow, items: OrderItemRow[]): Record<strin
     })),
     created_at: order.created_at,
     updated_at: order.updated_at,
+  };
+}
+
+export function toDetailsResponse(
+  order: OrderRow,
+  items: EnrichedOrderItemRow[],
+  customer: OrderCustomerInfo | null,
+  restaurant: OrderRestaurantInfo | null
+): Record<string, unknown> {
+  return {
+    ...toResponse(order, items),
+    customer,
+    restaurant,
+    items: items.map((item) => ({
+      id: item.id,
+      menu_item_id: item.menu_item_id,
+      item_name: item.item_name,
+      unit_price: parseFloat(item.unit_price),
+      quantity: item.quantity,
+      line_total: parseFloat(item.line_total),
+      special_instructions: item.special_instructions,
+      menu_item: {
+        id: item.menu_item_id,
+        name: item.menu_name,
+        description: item.menu_description,
+        image_url: item.menu_image_url,
+        category: item.category_id
+          ? {
+              id: item.category_id,
+              name: item.category_name,
+            }
+          : null,
+        subcategory: item.subcategory_id
+          ? {
+              id: item.subcategory_id,
+              name: item.subcategory_name,
+            }
+          : null,
+        nutrition: item.menu_nutrition,
+        search_tags: item.menu_search_tags,
+        is_available: item.menu_is_available,
+      },
+    })),
   };
 }
