@@ -64,6 +64,13 @@ export interface OrderRestaurantInfo {
   logo_url: string | null;
   cover_image_url: string | null;
   is_open: boolean | null;
+  owner?: {
+    id: string;
+    full_name: string | null;
+    email: string | null;
+    phone: string | null;
+    profile_picture_url: string | null;
+  } | null;
 }
 
 export interface EnrichedOrderItemRow extends OrderItemRow {
@@ -366,6 +373,11 @@ export async function findDetailsById(id: string): Promise<OrderDetailsRecord | 
       customer_email: string | null;
       customer_phone: string | null;
       customer_profile_picture_url: string | null;
+      restaurant_owner_id: string | null;
+      restaurant_owner_full_name: string | null;
+      restaurant_owner_email: string | null;
+      restaurant_owner_phone: string | null;
+      restaurant_owner_profile_picture_url: string | null;
       restaurant_name: string | null;
       restaurant_address: string | null;
       restaurant_zone: string | null;
@@ -381,6 +393,11 @@ export async function findDetailsById(id: string): Promise<OrderDetailsRecord | 
        u.email AS customer_email,
        u.phone AS customer_phone,
        u.profile_picture_url AS customer_profile_picture_url,
+       ru.id AS restaurant_owner_id,
+       ru.full_name AS restaurant_owner_full_name,
+       ru.email AS restaurant_owner_email,
+       ru.phone AS restaurant_owner_phone,
+       ru.profile_picture_url AS restaurant_owner_profile_picture_url,
        r.name AS restaurant_name,
        r.address AS restaurant_address,
        r.zone AS restaurant_zone,
@@ -391,6 +408,7 @@ export async function findDetailsById(id: string): Promise<OrderDetailsRecord | 
      FROM orders.orders o
      LEFT JOIN auth.users u ON u.id = o.user_id
      LEFT JOIN restaurant.restaurants r ON r.id = o.restaurant_id
+     LEFT JOIN auth.users ru ON ru.id = r.user_id
      WHERE o.id = $1`,
     [id]
   );
@@ -426,25 +444,34 @@ export async function findDetailsById(id: string): Promise<OrderDetailsRecord | 
 
   const customer: OrderCustomerInfo | null = row.user_id
     ? {
-        id: row.user_id,
-        full_name: row.customer_full_name,
-        email: row.customer_email,
-        phone: row.customer_phone,
-        profile_picture_url: row.customer_profile_picture_url,
-      }
+      id: row.user_id,
+      full_name: row.customer_full_name,
+      email: row.customer_email,
+      phone: row.customer_phone,
+      profile_picture_url: row.customer_profile_picture_url,
+    }
     : null;
 
   const restaurant: OrderRestaurantInfo | null = row.restaurant_id
     ? {
-        id: row.restaurant_id,
-        name: row.restaurant_name,
-        address: row.restaurant_address,
-        zone: row.restaurant_zone,
-        cuisine: row.restaurant_cuisine,
-        logo_url: row.restaurant_logo_url,
-        cover_image_url: row.restaurant_cover_image_url,
-        is_open: row.restaurant_is_open,
-      }
+      id: row.restaurant_id,
+      name: row.restaurant_name,
+      address: row.restaurant_address,
+      zone: row.restaurant_zone,
+      cuisine: row.restaurant_cuisine,
+      logo_url: row.restaurant_logo_url,
+      cover_image_url: row.restaurant_cover_image_url,
+      is_open: row.restaurant_is_open,
+      owner: row.restaurant_owner_id
+        ? {
+          id: row.restaurant_owner_id,
+          full_name: row.restaurant_owner_full_name,
+          email: row.restaurant_owner_email,
+          phone: row.restaurant_owner_phone,
+          profile_picture_url: row.restaurant_owner_profile_picture_url,
+        }
+        : null,
+    }
     : null;
 
   return { order, items, customer, restaurant };
@@ -612,15 +639,15 @@ export function toDetailsResponse(
         image_url: item.menu_image_url,
         category: item.category_id
           ? {
-              id: item.category_id,
-              name: item.category_name,
-            }
+            id: item.category_id,
+            name: item.category_name,
+          }
           : null,
         subcategory: item.subcategory_id
           ? {
-              id: item.subcategory_id,
-              name: item.subcategory_name,
-            }
+            id: item.subcategory_id,
+            name: item.subcategory_name,
+          }
           : null,
         nutrition: item.menu_nutrition,
         search_tags: item.menu_search_tags,
