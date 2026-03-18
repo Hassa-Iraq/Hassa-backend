@@ -322,6 +322,43 @@ export async function findEnrichedItemsByOrderId(order_id: string): Promise<Enri
   return result.rows;
 }
 
+export async function findCustomersByIds(userIds: string[]): Promise<OrderCustomerInfo[]> {
+  if (userIds.length === 0) return [];
+  const result = await pool.query<OrderCustomerInfo>(
+    `SELECT
+       id,
+       full_name,
+       email,
+       phone,
+       profile_picture_url
+     FROM auth.users
+     WHERE id = ANY($1::uuid[])`,
+    [userIds]
+  );
+  return result.rows;
+}
+
+export async function findRestaurantsByIds(
+  restaurantIds: string[]
+): Promise<OrderRestaurantInfo[]> {
+  if (restaurantIds.length === 0) return [];
+  const result = await pool.query<OrderRestaurantInfo>(
+    `SELECT
+       id,
+       name,
+       address,
+       zone,
+       cuisine,
+       logo_url,
+       cover_image_url,
+       is_open
+     FROM restaurant.restaurants
+     WHERE id = ANY($1::uuid[])`,
+    [restaurantIds]
+  );
+  return result.rows;
+}
+
 export async function findDetailsById(id: string): Promise<OrderDetailsRecord | null> {
   const orderResult = await pool.query<
     OrderRow & {
@@ -590,5 +627,18 @@ export function toDetailsResponse(
         is_available: item.menu_is_available,
       },
     })),
+  };
+}
+
+export function toResponseWithParties(
+  order: OrderRow,
+  items: OrderItemRow[],
+  customer: OrderCustomerInfo | null,
+  restaurant: OrderRestaurantInfo | null
+): Record<string, unknown> {
+  return {
+    ...toResponse(order, items),
+    customer,
+    restaurant,
   };
 }

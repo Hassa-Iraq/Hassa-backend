@@ -418,11 +418,29 @@ export async function listOrders(req: AuthRequest, res: Response): Promise<void>
       date_from: filters.date_from,
       date_to: filters.date_to,
     });
-    const orders = await Promise.all(
-      rows.map(async (row) => {
-        const items = await Order.findItemsByOrderId(row.id);
-        return Order.toResponse(row, items);
-      })
+    const uniqueUserIds = Array.from(new Set(rows.map((row) => row.user_id)));
+    const uniqueRestaurantIds = Array.from(
+      new Set(rows.map((row) => row.restaurant_id))
+    );
+
+    const [customers, restaurants, itemsPerOrder] = await Promise.all([
+      Order.findCustomersByIds(uniqueUserIds),
+      Order.findRestaurantsByIds(uniqueRestaurantIds),
+      Promise.all(rows.map((row) => Order.findItemsByOrderId(row.id))),
+    ]);
+
+    const customerMap = new Map(customers.map((customer) => [customer.id, customer]));
+    const restaurantMap = new Map(
+      restaurants.map((restaurant) => [restaurant.id, restaurant])
+    );
+
+    const orders = rows.map((row, index) =>
+      Order.toResponseWithParties(
+        row,
+        itemsPerOrder[index] ?? [],
+        customerMap.get(row.user_id) ?? null,
+        restaurantMap.get(row.restaurant_id) ?? null
+      )
     );
 
     res.status(200).json({
