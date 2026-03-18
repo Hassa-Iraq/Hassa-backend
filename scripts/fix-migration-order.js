@@ -18,6 +18,7 @@ const { execSync } = require("child_process");
 const { Client } = require("pg");
 
 const MIGRATION_NAME = "20250217000007_delivery_schema";
+const LATER_MIGRATION_NAME = "20250217000008_menu_category_image";
 const rootDir = join(__dirname, "..");
 
 function loadEnvFile() {
@@ -152,33 +153,57 @@ async function main() {
   console.log("Connected.\n");
 
   try {
-    const { rows } = await client.query(
-      "SELECT name FROM pgmigrations WHERE name = $1",
-      [MIGRATION_NAME]
+    const { rows: laterRows } = await client.query(
+      "SELECT run_on FROM pgmigrations WHERE name = $1",
+      [LATER_MIGRATION_NAME]
     );
 
-    if (rows.length > 0) {
-      console.log(`[SKIP] "${MIGRATION_NAME}" is already recorded in pgmigrations. Nothing to fix.`);
+    if (laterRows.length === 0) {
+      console.log(`[ERROR] "${LATER_MIGRATION_NAME}" not found in pgmigrations. Nothing to fix.`);
       return;
     }
 
-    console.log(`[INFO] "${MIGRATION_NAME}" is missing from pgmigrations. Starting fix...\n`);
-    console.log("[STEP 1/2] Applying skipped migration SQL...");
-    await client.query(MIGRATION_SQL);
-    console.log("[STEP 1/2] Done — delivery schema is in place.\n");
+    const laterRunOn = laterRows[0].run_on;
+    const correctRunOn = new Date(new Date(laterRunOn).getTime() - 1000);
+    console.log(`[INFO] "${LATER_MIGRATION_NAME}" was run at: ${laterRunOn}`);
+    console.log(`[INFO] Will set "${MIGRATION_NAME}" run_on to: ${correctRunOn.toISOString()}\n`);
 
-    console.log("[STEP 2/2] Recording migration in pgmigrations table...");
-    await client.query(
-      "INSERT INTO pgmigrations (name, run_on) VALUES ($1, NOW())",
+    const { rows: existing } = await client.query(
+      "SELECT name, run_on FROM pgmigrations WHERE name = $1",
       [MIGRATION_NAME]
     );
-    console.log("[STEP 2/2] Done — migration marked as run.\n");
+
+    if (existing.length > 0) {
+      const currentRunOn = existing[0].run_on;
+      if (new Date(currentRunOn) < new Date(laterRunOn)) {
+        console.log(`[SKIP] "${MIGRATION_NAME}" is already recorded before "${LATER_MIGRATION_NAME}" (run_on: ${currentRunOn}). Order is correct.`);
+        return;
+      }
+      console.log(`[FIX] "${MIGRATION_NAME}" exists but run_on=${currentRunOn} is after migration 8. Correcting timestamp...`);
+      await client.query(
+        "UPDATE pgmigrations SET run_on = $1 WHERE name = $2",
+        [correctRunOn, MIGRATION_NAME]
+      );
+      console.log("[FIX] Timestamp corrected.\n");
+    } else {
+      console.log(`[INFO] "${MIGRATION_NAME}" is missing from pgmigrations. Starting fix...\n`);
+      console.log("[STEP 1/2] Applying skipped migration SQL...");
+      await client.query(MIGRATION_SQL);
+      console.log("[STEP 1/2] Done — delivery schema is in place.\n");
+
+      console.log("[STEP 2/2] Recording migration in pgmigrations table...");
+      await client.query(
+        "INSERT INTO pgmigrations (name, run_on) VALUES ($1, $2)",
+        [MIGRATION_NAME, correctRunOn]
+      );
+      console.log("[STEP 2/2] Done — migration marked as run.\n");
+    }
 
     const { rows: allMigrations } = await client.query(
       "SELECT name, run_on FROM pgmigrations ORDER BY run_on ASC"
     );
-    console.log("Current pgmigrations table:");
-    allMigrations.forEach((r, i) => console.log(`  ${i + 1}. ${r.name}`));
+    console.log("Current pgmigrations table (ordered by run_on):");
+    allMigrations.forEach((r, i) => console.log(`  ${i + 1}. ${r.name}  [${r.run_on}]`));
     console.log();
 
   } finally {
