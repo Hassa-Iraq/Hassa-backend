@@ -1,238 +1,244 @@
 import { Request, Response } from "express";
 import * as AnalyticsModel from "../models/analyticsModel";
 
-const FILTER_VALUES: AnalyticsModel.AnalyticsFilter[] = [
-  "overall",
-  "today",
-  "this_month",
-  "this_year",
-];
+const FILTER_VALUES: AnalyticsModel.AnalyticsFilter[] = ["overall", "today", "this_month", "this_year"];
 
-type OrderMetricKey = keyof AnalyticsModel.OrderStatistics;
-
-function normalizeFilter(value: unknown): AnalyticsModel.AnalyticsFilter {
-  if (typeof value !== "string") return "overall";
-  const normalized = value.trim().toLowerCase();
+function parseFilter(req: Request, res: Response): AnalyticsModel.AnalyticsFilter | null {
+  const rawValue = req.query.filter;
+  if (rawValue === undefined) return "overall";
+  if (typeof rawValue !== "string") {
+    res.status(400).json({
+      success: false,
+      status: "ERROR",
+      message: "filter must be a string",
+      data: null,
+    });
+    return null;
+  }
+  const normalized = rawValue.trim().toLowerCase();
   if (FILTER_VALUES.includes(normalized as AnalyticsModel.AnalyticsFilter)) {
     return normalized as AnalyticsModel.AnalyticsFilter;
   }
-  return "overall";
-}
-
-function parseLimit(value: unknown, fallback: number = 10): number {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.min(50, Math.max(1, Math.trunc(parsed)));
+  res.status(400).json({
+    success: false,
+    status: "ERROR",
+    message: "Invalid filter. Use one of overall, today, this_month, this_year",
+    data: null,
+  });
+  return null;
 }
 
 function toNumber(value: string | number): number {
   return typeof value === "number" ? value : Number(value || 0);
 }
 
-function sendOk(res: Response, message: string, data: Record<string, unknown>): Response {
-  return res.status(200).json({
-    success: true,
-    status: "OK",
-    message,
-    data,
-  });
+export async function popularRestaurants(req: Request, res: Response): Promise<void> {
+  try {
+    const filter = parseFilter(req, res);
+    if (!filter) return;
+    const rows = await AnalyticsModel.getPopularRestaurants(filter);
+
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Popular restaurants retrieved",
+      data: {
+        filter,
+        restaurants: rows.map((row, index) => ({
+          rank: index + 1,
+          restaurant_id: row.restaurant_id,
+          restaurant_name: row.restaurant_name,
+          logo_url: row.logo_url,
+          total_orders: row.total_orders,
+          total_revenue: toNumber(row.total_revenue),
+        })),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to get popular restaurants",
+      data: null,
+    });
+  }
 }
 
-async function sendOrderMetric(
-  req: Request,
-  res: Response,
-  metric: OrderMetricKey,
-  message: string
-): Promise<Response> {
-  const filter = normalizeFilter(req.query.filter);
-  const stats = await AnalyticsModel.getOrderStatistics(filter);
+export async function statistics(req: Request, res: Response): Promise<void> {
+  try {
+    const filter = parseFilter(req, res);
+    if (!filter) return;
+    const stats = await AnalyticsModel.getPlatformStatistics(filter);
 
-  return sendOk(res, message, {
-    filter,
-    [metric]: stats[metric],
-  });
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Platform statistics retrieved",
+      data: {
+        filter,
+        ...stats,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to get platform statistics",
+      data: null,
+    });
+  }
 }
 
-export async function popularRestaurants(req: Request, res: Response): Promise<Response> {
-  const filter = normalizeFilter(req.query.filter);
-  const limit = parseLimit(req.query.limit, 10);
-  const rows = await AnalyticsModel.getPopularRestaurants(filter, limit);
+export async function orderStatistics(req: Request, res: Response): Promise<void> {
+  try {
+    const filter = parseFilter(req, res);
+    if (!filter) return;
+    const stats = await AnalyticsModel.getOrderStatistics(filter);
 
-  return sendOk(res, "Popular restaurants retrieved", {
-    filter,
-    limit,
-    restaurants: rows.map((row, index) => ({
-      rank: index + 1,
-      restaurant_id: row.restaurant_id,
-      restaurant_name: row.restaurant_name,
-      logo_url: row.logo_url,
-      total_orders: row.total_orders,
-      total_revenue: toNumber(row.total_revenue),
-    })),
-  });
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Order statistics retrieved",
+      data: {
+        filter,
+        ...stats,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to get order statistics",
+      data: null,
+    });
+  }
 }
 
-export async function statistics(req: Request, res: Response): Promise<Response> {
-  const filter = normalizeFilter(req.query.filter);
-  const stats = await AnalyticsModel.getPlatformStatistics(filter);
+export async function topDeliveryMen(req: Request, res: Response): Promise<void> {
+  try {
+    const filter = parseFilter(req, res);
+    if (!filter) return;
+    const rows = await AnalyticsModel.getTopDeliveryMen(filter);
 
-  return sendOk(res, "Platform statistics retrieved", {
-    filter,
-    ...stats,
-  });
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Top delivery men retrieved",
+      data: {
+        filter,
+        delivery_men: rows.map((row, index) => ({
+          rank: index + 1,
+          ...row,
+        })),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to get top delivery men",
+      data: null,
+    });
+  }
 }
 
-export async function customersRegistered(req: Request, res: Response): Promise<Response> {
-  const filter = normalizeFilter(req.query.filter);
-  const total = await AnalyticsModel.getCustomersRegistered(filter);
-  return sendOk(res, "Customers registered retrieved", {
-    filter,
-    customers_registered: total,
-  });
+export async function topRestaurants(req: Request, res: Response): Promise<void> {
+  try {
+    const filter = parseFilter(req, res);
+    if (!filter) return;
+    const rows = await AnalyticsModel.getTopRestaurants(filter);
+
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Top restaurants retrieved",
+      data: {
+        filter,
+        restaurants: rows.map((row, index) => ({
+          rank: index + 1,
+          restaurant_id: row.restaurant_id,
+          restaurant_name: row.restaurant_name,
+          logo_url: row.logo_url,
+          delivered_orders: row.delivered_orders,
+          total_orders: row.total_orders,
+          total_revenue: toNumber(row.total_revenue),
+        })),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to get top restaurants",
+      data: null,
+    });
+  }
 }
 
-export async function restaurantsRegistered(req: Request, res: Response): Promise<Response> {
-  const filter = normalizeFilter(req.query.filter);
-  const total = await AnalyticsModel.getRestaurantsRegistered(filter);
-  return sendOk(res, "Restaurants registered retrieved", {
-    filter,
-    restaurants_registered: total,
-  });
+export async function topRatedFood(req: Request, res: Response): Promise<void> {
+  try {
+    const filter = parseFilter(req, res);
+    if (!filter) return;
+    const rows = await AnalyticsModel.getTopRatedFood(filter);
+
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Top rated food retrieved",
+      data: {
+        filter,
+        items: rows.map((row, index) => ({
+          rank: index + 1,
+          menu_item_id: row.menu_item_id,
+          menu_item_name: row.menu_item_name,
+          restaurant_id: row.restaurant_id,
+          restaurant_name: row.restaurant_name,
+          rating_score: toNumber(row.rating_score),
+          quantity_sold: row.quantity_sold,
+          order_items_count: row.order_items_count,
+        })),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to get top rated food",
+      data: null,
+    });
+  }
 }
 
-export async function deliveryMenRegistered(req: Request, res: Response): Promise<Response> {
-  const filter = normalizeFilter(req.query.filter);
-  const total = await AnalyticsModel.getDeliveryMenRegistered(filter);
-  return sendOk(res, "Delivery men registered retrieved", {
-    filter,
-    delivery_men_registered: total,
-  });
-}
+export async function topSellingFood(req: Request, res: Response): Promise<void> {
+  try {
+    const filter = parseFilter(req, res);
+    if (!filter) return;
+    const rows = await AnalyticsModel.getTopSellingFood(filter);
 
-export async function orderStatistics(req: Request, res: Response): Promise<Response> {
-  const filter = normalizeFilter(req.query.filter);
-  const stats = await AnalyticsModel.getOrderStatistics(filter);
-
-  return sendOk(res, "Order statistics retrieved", {
-    filter,
-    ...stats,
-    notes: {
-      refunded: "Placeholder metric until payments/refunds module is integrated.",
-      payment_failed: "Placeholder metric until payments module is integrated.",
-    },
-  });
-}
-
-export async function delivered(req: Request, res: Response): Promise<Response> {
-  return sendOrderMetric(req, res, "delivered", "Delivered orders retrieved");
-}
-
-export async function cancelled(req: Request, res: Response): Promise<Response> {
-  return sendOrderMetric(req, res, "cancelled", "Cancelled orders retrieved");
-}
-
-export async function refunded(req: Request, res: Response): Promise<Response> {
-  return sendOrderMetric(req, res, "refunded", "Refunded orders retrieved");
-}
-
-export async function paymentFailed(req: Request, res: Response): Promise<Response> {
-  return sendOrderMetric(req, res, "payment_failed", "Payment failed orders retrieved");
-}
-
-export async function unassigned(req: Request, res: Response): Promise<Response> {
-  return sendOrderMetric(req, res, "unassigned", "Unassigned orders retrieved");
-}
-
-export async function acceptedByRider(req: Request, res: Response): Promise<Response> {
-  return sendOrderMetric(req, res, "accepted_by_rider", "Accepted by rider orders retrieved");
-}
-
-export async function cookingInRestaurants(req: Request, res: Response): Promise<Response> {
-  return sendOrderMetric(
-    req,
-    res,
-    "cooking_in_restaurants",
-    "Cooking in restaurants orders retrieved"
-  );
-}
-
-export async function pickedUpByRider(req: Request, res: Response): Promise<Response> {
-  return sendOrderMetric(req, res, "picked_up_by_rider", "Picked up by rider orders retrieved");
-}
-
-export async function topDeliveryMen(req: Request, res: Response): Promise<Response> {
-  const filter = normalizeFilter(req.query.filter);
-  const limit = parseLimit(req.query.limit, 10);
-  const rows = await AnalyticsModel.getTopDeliveryMen(filter, limit);
-
-  return sendOk(res, "Top delivery men retrieved", {
-    filter,
-    limit,
-    delivery_men: rows.map((row, index) => ({
-      rank: index + 1,
-      ...row,
-    })),
-  });
-}
-
-export async function topRestaurants(req: Request, res: Response): Promise<Response> {
-  const filter = normalizeFilter(req.query.filter);
-  const limit = parseLimit(req.query.limit, 10);
-  const rows = await AnalyticsModel.getTopRestaurants(filter, limit);
-
-  return sendOk(res, "Top restaurants retrieved", {
-    filter,
-    limit,
-    restaurants: rows.map((row, index) => ({
-      rank: index + 1,
-      restaurant_id: row.restaurant_id,
-      restaurant_name: row.restaurant_name,
-      logo_url: row.logo_url,
-      delivered_orders: row.delivered_orders,
-      total_orders: row.total_orders,
-      total_revenue: toNumber(row.total_revenue),
-    })),
-  });
-}
-
-export async function topRatedFood(req: Request, res: Response): Promise<Response> {
-  const filter = normalizeFilter(req.query.filter);
-  const limit = parseLimit(req.query.limit, 10);
-  const rows = await AnalyticsModel.getTopRatedFood(filter, limit);
-
-  return sendOk(res, "Top rated food retrieved", {
-    filter,
-    limit,
-    items: rows.map((row, index) => ({
-      rank: index + 1,
-      menu_item_id: row.menu_item_id,
-      menu_item_name: row.menu_item_name,
-      restaurant_id: row.restaurant_id,
-      restaurant_name: row.restaurant_name,
-      rating_score: toNumber(row.rating_score),
-      quantity_sold: row.quantity_sold,
-      order_items_count: row.order_items_count,
-    })),
-  });
-}
-
-export async function topSellingFood(req: Request, res: Response): Promise<Response> {
-  const filter = normalizeFilter(req.query.filter);
-  const limit = parseLimit(req.query.limit, 10);
-  const rows = await AnalyticsModel.getTopSellingFood(filter, limit);
-
-  return sendOk(res, "Top selling food retrieved", {
-    filter,
-    limit,
-    items: rows.map((row, index) => ({
-      rank: index + 1,
-      menu_item_id: row.menu_item_id,
-      menu_item_name: row.menu_item_name,
-      restaurant_id: row.restaurant_id,
-      restaurant_name: row.restaurant_name,
-      quantity_sold: row.quantity_sold,
-      total_revenue: toNumber(row.total_revenue),
-      order_items_count: row.order_items_count,
-    })),
-  });
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Top selling food retrieved",
+      data: {
+        filter,
+        items: rows.map((row, index) => ({
+          rank: index + 1,
+          menu_item_id: row.menu_item_id,
+          menu_item_name: row.menu_item_name,
+          restaurant_id: row.restaurant_id,
+          restaurant_name: row.restaurant_name,
+          quantity_sold: row.quantity_sold,
+          total_revenue: toNumber(row.total_revenue),
+          order_items_count: row.order_items_count,
+        })),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to get top selling food",
+      data: null,
+    });
+  }
 }

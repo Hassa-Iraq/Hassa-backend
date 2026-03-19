@@ -1,6 +1,7 @@
 import pool from "../db/connection";
 
 export type AnalyticsFilter = "overall" | "today" | "this_month" | "this_year";
+const DEFAULT_TOP_RESULTS_LIMIT = 10;
 
 export interface PopularRestaurantRow {
   restaurant_id: string;
@@ -151,12 +152,11 @@ async function countOrdersByStatuses(
 }
 
 export async function getPopularRestaurants(
-  filter: AnalyticsFilter,
-  limit: number
+  filter: AnalyticsFilter
 ): Promise<PopularRestaurantRow[]> {
   const params: unknown[] = [];
   const dateCondition = addDateFilter(filter, params, "o.created_at");
-  params.push(limit);
+  params.push(DEFAULT_TOP_RESULTS_LIMIT);
 
   const result = await pool.query<PopularRestaurantRow>(
     `SELECT
@@ -191,18 +191,6 @@ export async function getPlatformStatistics(
     restaurants_registered: restaurants,
     delivery_men_registered: deliveryMen,
   };
-}
-
-export async function getCustomersRegistered(filter: AnalyticsFilter): Promise<number> {
-  return countUsersByRole("customer", filter);
-}
-
-export async function getRestaurantsRegistered(filter: AnalyticsFilter): Promise<number> {
-  return countRestaurants(filter);
-}
-
-export async function getDeliveryMenRegistered(filter: AnalyticsFilter): Promise<number> {
-  return countUsersByRole("driver", filter);
 }
 
 export async function getOrderStatistics(filter: AnalyticsFilter): Promise<OrderStatistics> {
@@ -261,15 +249,14 @@ export async function getOrderStatistics(filter: AnalyticsFilter): Promise<Order
 }
 
 export async function getTopDeliveryMen(
-  filter: AnalyticsFilter,
-  limit: number
+  filter: AnalyticsFilter
 ): Promise<TopDeliveryManRow[]> {
   const hasDeliveriesTable = await tableExists("delivery", "deliveries");
   if (!hasDeliveriesTable) return [];
 
   const params: unknown[] = [];
   const dateCondition = addDateFilter(filter, params, "d.created_at");
-  params.push(limit);
+  params.push(DEFAULT_TOP_RESULTS_LIMIT);
 
   const result = await pool.query<TopDeliveryManRow>(
     `SELECT
@@ -293,12 +280,11 @@ export async function getTopDeliveryMen(
 }
 
 export async function getTopRestaurants(
-  filter: AnalyticsFilter,
-  limit: number
+  filter: AnalyticsFilter
 ): Promise<TopRestaurantRow[]> {
   const params: unknown[] = [];
   const dateCondition = addDateFilter(filter, params, "o.created_at");
-  params.push(limit);
+  params.push(DEFAULT_TOP_RESULTS_LIMIT);
 
   const result = await pool.query<TopRestaurantRow>(
     `SELECT
@@ -321,15 +307,14 @@ export async function getTopRestaurants(
 }
 
 export async function getTopRatedFood(
-  filter: AnalyticsFilter,
-  limit: number
+  filter: AnalyticsFilter
 ): Promise<TopRatedFoodRow[]> {
   const params: unknown[] = [];
   const startDate = getFilterStartDate(filter);
   const orderJoinFilter = startDate
     ? ` AND o.created_at >= $${params.push(startDate)}`
     : "";
-  params.push(limit);
+  params.push(DEFAULT_TOP_RESULTS_LIMIT);
 
   const result = await pool.query<TopRatedFoodRow>(
     `SELECT
@@ -355,12 +340,11 @@ export async function getTopRatedFood(
 }
 
 export async function getTopSellingFood(
-  filter: AnalyticsFilter,
-  limit: number
+  filter: AnalyticsFilter
 ): Promise<TopSellingFoodRow[]> {
   const params: unknown[] = [];
   const dateCondition = addDateFilter(filter, params, "o.created_at");
-  params.push(limit);
+  params.push(DEFAULT_TOP_RESULTS_LIMIT);
 
   const result = await pool.query<TopSellingFoodRow>(
     `SELECT
