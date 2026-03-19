@@ -12,19 +12,17 @@ export const authenticate = asyncHandler(async (
   next: NextFunction
 ): Promise<void> => {
   const authHeader = req.headers.authorization;
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     throw new UnauthorizedError('No token provided');
   }
 
   const token = authHeader.substring(7);
 
-  // Call Auth Service to validate token
   const authServiceUrl = config.AUTH_SERVICE_URL || 'http://auth-service:3001';
-  const response = await fetch(`${authServiceUrl}/auth/validate`, {
-    method: 'POST',
+  const response = await fetch(`${authServiceUrl}/auth/me`, {
+    method: 'GET',
     headers: {
-      'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
   });
@@ -38,7 +36,6 @@ export const authenticate = asyncHandler(async (
   const data = await response.json() as {
     success?: boolean;
     data?: {
-      valid?: boolean;
       user?: {
         id: string;
         role: string;
@@ -47,7 +44,7 @@ export const authenticate = asyncHandler(async (
     };
   };
 
-  if (!data.success || !data.data?.valid || !data.data?.user) {
+  if (!data.success || !data.data?.user) {
     throw new UnauthorizedError('Invalid token');
   }
 

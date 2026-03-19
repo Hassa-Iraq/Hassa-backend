@@ -3,10 +3,8 @@ import cors from "cors";
 import { createLogger } from "shared/logger/index";
 import { requestLogger } from "shared/logger/request-logger";
 import config from "./config/index";
-import healthRoutes from "./routes/health";
-import couponRoutes from "./routes/coupons";
-import bannerRoutes from "./routes/banners";
 import errorHandler from "./middleware/errorHandler";
+import analyticsRoutes from "./routes/analytics";
 
 const logger = createLogger(config.SERVICE_NAME, config.LOG_LEVEL);
 
@@ -37,10 +35,7 @@ app.use((req, _res, next) => {
 });
 
 app.use(requestLogger);
-
-app.use("/", healthRoutes);
-app.use("/coupons", couponRoutes);
-app.use("/", bannerRoutes);
+app.use("/analytics", analyticsRoutes);
 
 app.use(errorHandler);
 
