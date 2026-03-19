@@ -1,12 +1,8 @@
 import express, { Express } from "express";
 import cors from "cors";
-import { createLogger } from "shared/logger/index";
-import { requestLogger } from "shared/logger/request-logger";
-import config from "./config/index";
 import errorHandler from "./middleware/errorHandler";
 import analyticsRoutes from "./routes/analytics";
-
-const logger = createLogger(config.SERVICE_NAME, config.LOG_LEVEL);
+import healthRoutes from "./routes/health";
 
 const app: Express = express();
 
@@ -29,12 +25,7 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use((req, _res, next) => {
-  (req as any).logger = logger;
-  next();
-});
-
-app.use(requestLogger);
+app.use("/", healthRoutes);
 app.use("/analytics", analyticsRoutes);
 
 app.use(errorHandler);
