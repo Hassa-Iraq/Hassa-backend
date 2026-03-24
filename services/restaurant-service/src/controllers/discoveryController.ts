@@ -4,6 +4,23 @@ import * as Restaurant from "../models/Restaurant";
 import { cache, cacheKeys } from "../utils/redis";
 import { AuthRequest } from "../middleware/auth";
 
+function normalizeImageUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("{{")) return trimmed;
+  if (trimmed.startsWith("/")) return trimmed;
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    try {
+      const parsed = new URL(trimmed);
+      return parsed.pathname || null;
+    } catch {
+      return trimmed;
+    }
+  }
+  return `/${trimmed.replace(/^\/+/, "")}`;
+}
+
 function parseCoordinate(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim().length > 0) {
@@ -268,10 +285,18 @@ export async function getHomeData(req: Request, res: Response): Promise<void> {
       status: "OK",
       message: "Home data retrieved",
       data: {
-        banners: bannersResult.rows,
-        categories: categoriesResult.rows,
+        banners: bannersResult.rows.map((row) => ({
+          ...row,
+          banner_image_url: normalizeImageUrl(row.banner_image_url),
+        })),
+        categories: categoriesResult.rows.map((row) => ({
+          ...row,
+          image_url: normalizeImageUrl(row.image_url),
+        })),
         recommended_restaurants: recommendedResult.rows.map((row) => ({
           ...Restaurant.toResponse(row),
+          logo_url: normalizeImageUrl(row.logo_url),
+          cover_image_url: normalizeImageUrl(row.cover_image_url),
           distance_km: row.distance_km != null ? parseFloat(String(row.distance_km)) : null,
           rating: row.rating != null ? parseFloat(String(row.rating)) : 0,
           recommendation_score:

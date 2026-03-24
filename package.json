@@ -16,7 +16,7 @@
     "migrate:up": "node scripts/migrate.js up",
     "migrate:down": "node scripts/migrate.js down",
     "migrate:create": "node scripts/migrate.js create",
-    "postman:normalize-query": "node scripts/normalize-postman-query.js",
+    "postman:normalize-query": "node scripts/normalize-postman-query.js postman/Food-App-API.postman_collection.json postman/Food-App-API.apidog.postman_collection.json",
     "lint": "eslint . --ext .ts --max-warnings 100",
     "lint:fix": "eslint . --ext .ts --fix",
     "type-check": "for dir in services/*/ shared/*/; do if [ -f \"$dir/tsconfig.json\" ]; then echo \"Checking $dir...\" && (cd \"$dir\" && tsc --noEmit) || exit 1; fi; done",
