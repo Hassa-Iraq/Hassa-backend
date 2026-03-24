@@ -14,8 +14,6 @@ router.post(
 );
 router.get("/banners", authenticate, authorize("restaurant"), bannerController.listBanners);
 router.get("/banners/:id", authenticate, authorize("restaurant"), bannerController.getBanner);
-router.post("/banners/:id/accept", authenticate, authorize("restaurant"), bannerController.acceptBannerQuote);
-router.post("/banners/:id/reject", authenticate, authorize("restaurant"), bannerController.rejectBannerQuote);
 router.get("/public/banners", bannerController.listPublicBanners);
 
 export default router;
