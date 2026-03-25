@@ -7,7 +7,6 @@ export interface BannerRow {
   banner_image_url: string;
   description: string | null;
   status: string;
-  requested_by_user_id: string | null;
   approved_at: Date | null;
   is_public: boolean;
   valid_from: Date | null;
@@ -52,21 +51,19 @@ export async function create(params: {
   banner_name: string;
   banner_image_url: string;
   description?: string | null;
-  requested_by_user_id: string;
   valid_from?: string | null;
   valid_to?: string | null;
 }): Promise<BannerRow> {
   const result = await pool.query<BannerRow>(
     `INSERT INTO banners.banners
-     (restaurant_id, banner_name, banner_image_url, description, status, requested_by_user_id, valid_from, valid_to)
-     VALUES ($1, $2, $3, $4, 'requested', $5, $6, $7)
+     (restaurant_id, banner_name, banner_image_url, description, status, valid_from, valid_to)
+     VALUES ($1, $2, $3, $4, 'requested', $5, $6)
      RETURNING *`,
     [
       params.restaurant_id,
       params.banner_name,
       params.banner_image_url,
       params.description ?? null,
-      params.requested_by_user_id,
       params.valid_from ?? null,
       params.valid_to ?? null,
     ]

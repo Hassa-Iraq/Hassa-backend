@@ -91,7 +91,6 @@ export async function createBanner(req: AuthRequest, res: Response): Promise<voi
       banner_name: banner_name.trim(),
       banner_image_url: imageUrl,
       description: (req.body.description as string) ?? null,
-      requested_by_user_id: req.user!.id,
       valid_from: (req.body.valid_from as string) ?? null,
       valid_to: (req.body.valid_to as string) ?? null,
     });
