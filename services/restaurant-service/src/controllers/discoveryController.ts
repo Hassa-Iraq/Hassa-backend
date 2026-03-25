@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import pool from "../db/connection";
+import * as Banner from "../models/Banner";
 import * as Restaurant from "../models/Restaurant";
 import { cache, cacheKeys } from "../utils/redis";
 import { AuthRequest } from "../middleware/auth";
@@ -205,22 +206,7 @@ export async function getHomeData(req: Request, res: Response): Promise<void> {
     const recommendedLimit = Math.min(20, Math.max(1, parseInt(String(req.query.recommended_limit)) || 10));
     const now = new Date();
 
-    const bannersResult = await pool.query(
-      `SELECT b.id, b.restaurant_id, b.banner_name, b.banner_image_url, b.description, b.valid_from, b.valid_to,
-              r.name AS restaurant_name
-       FROM banners.banners b
-       JOIN restaurant.restaurants r ON r.id = b.restaurant_id
-       WHERE b.status = 'approved'
-         AND (b.is_public = true OR b.is_public IS NULL)
-         AND (b.valid_from IS NULL OR b.valid_from <= $1)
-         AND (b.valid_to IS NULL OR b.valid_to >= $1)
-         AND r.parent_id IS NULL
-         AND r.is_active = true
-         AND r.is_blocked = false
-       ORDER BY b.approved_at DESC NULLS LAST, b.created_at DESC
-       LIMIT $2`,
-      [now, bannersLimit]
-    );
+    const bannersRows = await Banner.listPublic({ now, limit: bannersLimit, offset: 0 });
 
     const categoriesResult = await pool.query(
       `SELECT
@@ -285,9 +271,15 @@ export async function getHomeData(req: Request, res: Response): Promise<void> {
       status: "OK",
       message: "Home data retrieved",
       data: {
-        banners: bannersResult.rows.map((row) => ({
-          ...row,
+        banners: bannersRows.map((row) => ({
+          id: row.id,
+          restaurant_id: row.restaurant_id,
+          banner_name: row.banner_name,
           banner_image_url: normalizeImageUrl(row.banner_image_url),
+          description: row.description,
+          valid_from: row.valid_from,
+          valid_to: row.valid_to,
+          restaurant_name: row.restaurant_name,
         })),
         categories: categoriesResult.rows.map((row) => ({
           ...row,
