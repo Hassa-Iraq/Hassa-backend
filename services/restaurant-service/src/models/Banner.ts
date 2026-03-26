@@ -27,6 +27,13 @@ export interface ListOwnerBannersParams {
   status?: string;
 }
 
+export interface ListAdminBannersParams {
+  limit: number;
+  offset: number;
+  restaurant_id?: string;
+  status?: string;
+}
+
 export async function findRestaurantOwnerId(restaurantId: string): Promise<string | null> {
   const result = await pool.query<{ user_id: string }>(
     "SELECT user_id FROM restaurant.restaurants WHERE id = $1",
@@ -180,6 +187,64 @@ export async function deleteByIdForOwner(
        AND r.user_id = $2
      RETURNING b.*`,
     [id, owner_user_id]
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function listForAdmin(params: ListAdminBannersParams): Promise<BannerWithRestaurantRow[]> {
+  const values: unknown[] = [];
+  let i = 1;
+  let query = `SELECT b.*, r.name AS restaurant_name
+               FROM banners.banners b
+               JOIN restaurant.restaurants r ON b.restaurant_id = r.id
+               WHERE 1=1`;
+
+  if (params.restaurant_id) {
+    query += ` AND b.restaurant_id = $${i++}`;
+    values.push(params.restaurant_id);
+  }
+  if (params.status) {
+    query += ` AND b.status = $${i++}`;
+    values.push(params.status);
+  }
+
+  query += ` ORDER BY b.created_at DESC LIMIT $${i} OFFSET $${i + 1}`;
+  values.push(params.limit, params.offset);
+
+  const result = await pool.query<BannerWithRestaurantRow>(query, values);
+  return result.rows;
+}
+
+export async function countForAdmin(params: {
+  restaurant_id?: string;
+  status?: string;
+}): Promise<number> {
+  const values: unknown[] = [];
+  let i = 1;
+  let query = `SELECT COUNT(*)::int AS total
+               FROM banners.banners b
+               WHERE 1=1`;
+
+  if (params.restaurant_id) {
+    query += ` AND b.restaurant_id = $${i++}`;
+    values.push(params.restaurant_id);
+  }
+  if (params.status) {
+    query += ` AND b.status = $${i++}`;
+    values.push(params.status);
+  }
+
+  const result = await pool.query<{ total: number }>(query, values);
+  return result.rows[0]?.total ?? 0;
+}
+
+export async function findByIdForAdmin(id: string): Promise<BannerWithRestaurantRow | null> {
+  const result = await pool.query<BannerWithRestaurantRow>(
+    `SELECT b.*, r.name AS restaurant_name
+     FROM banners.banners b
+     JOIN restaurant.restaurants r ON b.restaurant_id = r.id
+     WHERE b.id = $1`,
+    [id]
   );
   return result.rows[0] ?? null;
 }

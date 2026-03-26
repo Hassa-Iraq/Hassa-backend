@@ -237,6 +237,76 @@ export async function adminUpdateBannerStatus(req: AuthRequest, res: Response): 
   }
 }
 
+export async function listAdminBanners(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const page = Math.max(1, parseInt(String(req.query.page)) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit)) || 20));
+    const offset = (page - 1) * limit;
+    const restaurant_id = req.query.restaurant_id as string | undefined;
+    const status = req.query.status as string | undefined;
+
+    const [rows, total] = await Promise.all([
+      Banner.listForAdmin({
+        limit,
+        offset,
+        restaurant_id,
+        status,
+      }),
+      Banner.countForAdmin({
+        restaurant_id,
+        status,
+      }),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Admin banners listed",
+      data: {
+        banners: rows,
+        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to list admin banners",
+      data: null,
+    });
+  }
+}
+
+export async function getAdminBanner(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const id = req.params.id as string;
+    const banner = await Banner.findByIdForAdmin(id);
+    if (!banner) {
+      res.status(404).json({
+        success: false,
+        status: "ERROR",
+        message: "Banner not found",
+        data: null,
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Admin banner retrieved",
+      data: { banner },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to get admin banner",
+      data: null,
+    });
+  }
+}
+
 export async function listBanners(req: AuthRequest, res: Response): Promise<void> {
   try {
     const userId = req.user!.id;

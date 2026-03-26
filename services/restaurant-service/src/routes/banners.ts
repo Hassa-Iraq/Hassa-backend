@@ -27,6 +27,8 @@ router.patch(
   authorize("admin"),
   bannerController.adminUpdateBannerStatus
 );
+router.get("/admin/banners", authenticate, authorize("admin"), bannerController.listAdminBanners);
+router.get("/admin/banners/:id", authenticate, authorize("admin"), bannerController.getAdminBanner);
 router.get("/public/banners", bannerController.listPublicBanners);
 
 export default router;
