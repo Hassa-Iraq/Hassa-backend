@@ -134,6 +134,56 @@ export async function findByIdForOwner(
   return result.rows[0] ?? null;
 }
 
+export async function updateStatusById(params: {
+  id: string;
+  status: string;
+  is_public?: boolean;
+  valid_from?: string | null;
+  valid_to?: string | null;
+}): Promise<BannerRow | null> {
+  const values: unknown[] = [params.id, params.status];
+  let i = 3;
+  let query = `UPDATE banners.banners
+               SET status = $2`;
+
+  if (params.status === "approved") {
+    query += `, approved_at = now()`;
+  }
+
+  if (params.is_public !== undefined) {
+    query += `, is_public = $${i++}`;
+    values.push(params.is_public);
+  }
+  if (params.valid_from !== undefined) {
+    query += `, valid_from = $${i++}`;
+    values.push(params.valid_from);
+  }
+  if (params.valid_to !== undefined) {
+    query += `, valid_to = $${i++}`;
+    values.push(params.valid_to);
+  }
+
+  query += `, updated_at = now() WHERE id = $1 RETURNING *`;
+  const result = await pool.query<BannerRow>(query, values);
+  return result.rows[0] ?? null;
+}
+
+export async function deleteByIdForOwner(
+  id: string,
+  owner_user_id: string
+): Promise<BannerRow | null> {
+  const result = await pool.query<BannerRow>(
+    `DELETE FROM banners.banners b
+     USING restaurant.restaurants r
+     WHERE b.restaurant_id = r.id
+       AND b.id = $1
+       AND r.user_id = $2
+     RETURNING b.*`,
+    [id, owner_user_id]
+  );
+  return result.rows[0] ?? null;
+}
+
 export async function listPublic(params: {
   now: Date;
   limit: number;

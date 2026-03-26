@@ -76,36 +76,6 @@ export async function uploadRestaurantAssets(req: AuthRequest, res: Response): P
   }
 }
 
-export async function uploadBannerImage(req: AuthRequest, res: Response): Promise<void> {
-  try {
-    const file = req.file;
-    if (!file) {
-      res.status(400).json({
-        success: false,
-        status: "ERROR",
-        message: "banner_image file is required",
-        data: null,
-      });
-      return;
-    }
-    res.status(200).json({
-      success: true,
-      status: "OK",
-      message: "Banner image uploaded successfully",
-      data: {
-        banner_image_url: getFileUrl(file.filename, file.fieldname),
-      },
-    });
-  } catch (err) {
-    res.status(500).json({
-      success: false,
-      status: "ERROR",
-      message: err instanceof Error ? err.message : "Failed to upload banner image",
-      data: null,
-    });
-  }
-}
-
 export async function createRestaurant(req: AuthRequest, res: Response): Promise<void> {
   try {
     const body = req.body as Record<string, unknown>;

@@ -21,13 +21,6 @@ router.post(
   ]),
   restaurantController.uploadRestaurantAssets
 );
-router.post(
-  "/uploads/banner-image",
-  authenticate,
-  authorize("admin", "restaurant"),
-  upload.single("banner_image"),
-  restaurantController.uploadBannerImage
-);
 router.post("/branches", authenticate, authorize("admin", "restaurant"), (req: AuthRequest, res) => {
   if (req.user?.role === "admin") {
     return restaurantController.createBranchByAdmin(req, res);

@@ -74,14 +74,12 @@ export async function createBanner(req: AuthRequest, res: Response): Promise<voi
     }
     const ok = await ensureRestaurantOwnership(req, res, restaurant_id);
     if (!ok) return;
-    const imageUrl =
-      banner_image_url?.trim() ||
-      (req.file && getFileUrl(req.file.filename, req.file.fieldname));
+    const imageUrl = banner_image_url?.trim();
     if (!imageUrl) {
       res.status(400).json({
         success: false,
         status: "ERROR",
-        message: "Either banner_image (file) or banner_image_url is required",
+        message: "banner_image_url is required",
         data: null,
       });
       return;
@@ -105,6 +103,135 @@ export async function createBanner(req: AuthRequest, res: Response): Promise<voi
       success: false,
       status: "ERROR",
       message: err instanceof Error ? err.message : "Failed to create banner",
+      data: null,
+    });
+  }
+}
+
+export async function uploadBannerImage(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "banner_image file is required",
+        data: null,
+      });
+      return;
+    }
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Banner image uploaded successfully",
+      data: {
+        banner_image_url: getFileUrl(file.filename, file.fieldname),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to upload banner image",
+      data: null,
+    });
+  }
+}
+
+export async function deleteBanner(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const id = req.params.id as string;
+    const ok = await ensureBannerOwnership(req, res, id);
+    if (!ok) return;
+
+    const deleted = await Banner.deleteByIdForOwner(id, req.user!.id);
+    if (!deleted) {
+      res.status(404).json({
+        success: false,
+        status: "ERROR",
+        message: "Banner not found",
+        data: null,
+      });
+      return;
+    }
+
+    await cache.delPattern("banners:public:approved:*");
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Banner deleted",
+      data: { banner: deleted },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to delete banner",
+      data: null,
+    });
+  }
+}
+
+export async function adminUpdateBannerStatus(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const id = req.params.id as string;
+    const status = String(req.body.status || "").trim().toLowerCase();
+    const is_public =
+      req.body.is_public === undefined ? undefined : Boolean(req.body.is_public);
+    const valid_from = (req.body.valid_from as string | undefined) ?? undefined;
+    const valid_to = (req.body.valid_to as string | undefined) ?? undefined;
+
+    if (!status) {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "status is required",
+        data: null,
+      });
+      return;
+    }
+
+    const allowedStatuses = new Set(["requested", "approved", "rejected"]);
+    if (!allowedStatuses.has(status)) {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "status must be one of: requested, approved, rejected",
+        data: null,
+      });
+      return;
+    }
+
+    const updated = await Banner.updateStatusById({
+      id,
+      status,
+      is_public,
+      valid_from,
+      valid_to,
+    });
+
+    if (!updated) {
+      res.status(404).json({
+        success: false,
+        status: "ERROR",
+        message: "Banner not found",
+        data: null,
+      });
+      return;
+    }
+
+    await cache.delPattern("banners:public:approved:*");
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Banner status updated",
+      data: { banner: updated },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to update banner status",
       data: null,
     });
   }
