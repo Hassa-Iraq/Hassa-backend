@@ -2,6 +2,7 @@ import { Response } from "express";
 import config from "../config/index";
 import * as Order from "../models/Order";
 import { AuthRequest } from "../middleware/auth";
+import * as DeliveryAddress from "../utils/deliveryAddress";
 
 interface IncomingOrderItem {
   menu_item_id?: string;
@@ -239,6 +240,28 @@ export async function createOrder(req: AuthRequest, res: Response): Promise<void
       return;
     }
 
+    const addressId = body.address_id;
+    if (typeof addressId !== "string" || !addressId.trim()) {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "address_id is required (saved address from GET /auth/addresses)",
+        data: null,
+      });
+      return;
+    }
+    const trimmedAddressId = addressId.trim();
+    const ownedAddress = await DeliveryAddress.findUserAddressById(trimmedAddressId, req.user!.id);
+    if (!ownedAddress) {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "address_id is not a saved address for this user",
+        data: null,
+      });
+      return;
+    }
+
     const created = await Order.create({
       user_id: req.user!.id,
       restaurant_id: restaurantId,
@@ -249,18 +272,21 @@ export async function createOrder(req: AuthRequest, res: Response): Promise<void
       total_amount: totalAmount,
       currency: typeof body.currency === "string" && body.currency.trim() ? body.currency.trim() : "PKR",
       notes: typeof body.notes === "string" ? body.notes : null,
-      delivery_address:
-        typeof body.delivery_address === "object" && body.delivery_address != null
-          ? (body.delivery_address as Record<string, unknown>)
-          : null,
+      delivery_address_id: trimmedAddressId,
       items,
     });
+
+    const displayAddress = await DeliveryAddress.deliveryAddressForOrderResponse(created.order);
+    const orderForResponse = {
+      ...created.order,
+      delivery_address: (displayAddress ?? null) as Record<string, unknown> | null,
+    };
 
     res.status(201).json({
       success: true,
       status: "OK",
       message: "Order created successfully",
-      data: { order: Order.toResponse(created.order, created.items) },
+      data: { order: Order.toResponse(orderForResponse, created.items) },
     });
   } catch (err) {
     res.status(500).json({
@@ -288,13 +314,18 @@ export async function getOrderById(req: AuthRequest, res: Response): Promise<voi
       });
       return;
     }
+    const resolvedDa = await DeliveryAddress.deliveryAddressForOrderResponse(details.order);
+    const orderForResponse = {
+      ...details.order,
+      delivery_address: (resolvedDa ?? null) as Record<string, unknown> | null,
+    };
     res.status(200).json({
       success: true,
       status: "OK",
       message: "Order retrieved",
       data: {
         order: Order.toDetailsResponse(
-          details.order,
+          orderForResponse,
           details.items,
           details.customer,
           details.restaurant
@@ -433,13 +464,20 @@ export async function listOrders(req: AuthRequest, res: Response): Promise<void>
       restaurants.map((restaurant) => [restaurant.id, restaurant])
     );
 
-    const orders = rows.map((row, index) =>
-      Order.toResponseWithParties(
-        row,
-        itemsPerOrder[index] ?? [],
-        customerMap.get(row.user_id) ?? null,
-        restaurantMap.get(row.restaurant_id) ?? null
-      )
+    const orders = await Promise.all(
+      rows.map(async (row, index) => {
+        const resolvedDa = await DeliveryAddress.deliveryAddressForOrderResponse(row);
+        const orderRow = {
+          ...row,
+          delivery_address: (resolvedDa ?? null) as Record<string, unknown> | null,
+        };
+        return Order.toResponseWithParties(
+          orderRow,
+          itemsPerOrder[index] ?? [],
+          customerMap.get(row.user_id) ?? null,
+          restaurantMap.get(row.restaurant_id) ?? null
+        );
+      })
     );
 
     res.status(200).json({

@@ -22,7 +22,8 @@ export interface OrderRow {
   total_amount: string;
   currency: string;
   notes: string | null;
-  delivery_address: Record<string, unknown> | null;
+  delivery_address_id: string | null;
+  delivery_address?: Record<string, unknown> | null;
   placed_at: Date;
   confirmed_at: Date | null;
   preparing_at: Date | null;
@@ -111,7 +112,7 @@ export interface CreateOrderInput {
   total_amount: number;
   currency?: string;
   notes?: string | null;
-  delivery_address?: Record<string, unknown> | null;
+  delivery_address_id: string;
   items: CreateOrderItemInput[];
 }
 
@@ -241,7 +242,7 @@ export async function create(input: CreateOrderInput): Promise<OrderWithItems> {
     const orderResult = await client.query(
       `INSERT INTO orders.orders (
          order_number, user_id, restaurant_id, status, subtotal, delivery_fee, tax_amount, discount_amount, total_amount,
-         currency, notes, delivery_address, placed_at
+         currency, notes, delivery_address_id, placed_at
        ) VALUES ($1, $2, $3, 'pending', $4, $5, $6, $7, $8, $9, $10, $11, NOW())
        RETURNING *`,
       [
@@ -255,10 +256,10 @@ export async function create(input: CreateOrderInput): Promise<OrderWithItems> {
         input.total_amount,
         input.currency ?? "PKR",
         input.notes ?? null,
-        input.delivery_address ? JSON.stringify(input.delivery_address) : null,
+        input.delivery_address_id,
       ]
     );
-    const order = orderResult.rows[0] as OrderRow;
+    const order = mapOrderRow(orderResult.rows[0] as Record<string, unknown>);
 
     const itemRows: OrderItemRow[] = [];
     for (const item of input.items) {
@@ -290,9 +291,20 @@ export async function create(input: CreateOrderInput): Promise<OrderWithItems> {
   }
 }
 
+function mapOrderRow(raw: Record<string, unknown>): OrderRow {
+  const did = raw.delivery_address_id;
+  const rest = { ...raw };
+  delete rest.delivery_address;
+  return {
+    ...rest,
+    delivery_address_id: did != null ? String(did) : null,
+  } as OrderRow;
+}
+
 export async function findById(id: string): Promise<OrderRow | null> {
   const r = await pool.query("SELECT * FROM orders.orders WHERE id = $1", [id]);
-  return (r.rows[0] as OrderRow | undefined) ?? null;
+  const raw = r.rows[0];
+  return raw ? mapOrderRow(raw as Record<string, unknown>) : null;
 }
 
 export async function findItemsByOrderId(order_id: string): Promise<OrderItemRow[]> {
@@ -429,7 +441,7 @@ export async function findDetailsById(id: string): Promise<OrderDetailsRecord | 
     total_amount: row.total_amount,
     currency: row.currency,
     notes: row.notes,
-    delivery_address: row.delivery_address,
+    delivery_address_id: row.delivery_address_id != null ? String(row.delivery_address_id) : null,
     placed_at: row.placed_at,
     confirmed_at: row.confirmed_at,
     preparing_at: row.preparing_at,
@@ -490,7 +502,7 @@ export async function list(filters: ListOrdersFilters): Promise<OrderRow[]> {
      LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,
     values
   );
-  return r.rows as OrderRow[];
+  return r.rows.map((raw) => mapOrderRow(raw as Record<string, unknown>));
 }
 
 export async function count(filters: Omit<ListOrdersFilters, "limit" | "offset">): Promise<number> {
@@ -573,7 +585,8 @@ export async function updateStatus(id: string, status: OrderStatus): Promise<Ord
   values.push(id);
 
   const r = await pool.query(query, values);
-  return (r.rows[0] as OrderRow | undefined) ?? null;
+  const raw = r.rows[0];
+  return raw ? mapOrderRow(raw as Record<string, unknown>) : null;
 }
 
 export function toResponse(order: OrderRow, items: OrderItemRow[]): Record<string, unknown> {
@@ -590,7 +603,8 @@ export function toResponse(order: OrderRow, items: OrderItemRow[]): Record<strin
     total_amount: parseFloat(order.total_amount),
     currency: order.currency,
     notes: order.notes,
-    delivery_address: order.delivery_address,
+    delivery_address_id: order.delivery_address_id ?? null,
+    delivery_address: order.delivery_address ?? null,
     placed_at: order.placed_at,
     confirmed_at: order.confirmed_at,
     preparing_at: order.preparing_at,
