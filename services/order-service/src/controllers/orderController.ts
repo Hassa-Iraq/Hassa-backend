@@ -16,14 +16,13 @@ interface MenuItemInfo {
 }
 
 const ALLOWED_NEXT_STATUSES: Record<Order.OrderStatus, Order.OrderStatus[]> = {
-  pending: ["confirmed", "rejected", "cancelled"],
+  pending: ["confirmed", "cancelled"],
   confirmed: ["preparing", "cancelled"],
   preparing: ["ready_for_pickup", "cancelled"],
   ready_for_pickup: ["out_for_delivery", "cancelled"],
   out_for_delivery: ["delivered", "cancelled"],
   delivered: [],
   cancelled: [],
-  rejected: [],
 };
 
 const ORDER_LIST_STATUS_MAP: Record<string, Order.OrderStatus[] | null> = {
@@ -33,7 +32,7 @@ const ORDER_LIST_STATUS_MAP: Record<string, Order.OrderStatus[] | null> = {
   processing: ["preparing", "ready_for_pickup"],
   "food on the way": ["out_for_delivery"],
   delivered: ["delivered"],
-  cancelled: ["cancelled", "rejected"],
+  cancelled: ["cancelled"],
   "payment failed": null,
   refunded: null,
   "offline payments": null,
@@ -605,6 +604,18 @@ export async function updateOrderStatus(req: AuthRequest, res: Response): Promis
       return;
     }
     const items = await Order.findItemsByOrderId(updated.id);
+    if (order.status === "pending" && nextStatus === "confirmed") {
+      const deliveryServiceUrl = config.DELIVERY_SERVICE_URL || "http://delivery-service:3004";
+      const internalToken = config.INTERNAL_SERVICE_TOKEN;
+      if (internalToken) {
+        fetch(`${deliveryServiceUrl}/deliveries/assignments/auto`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Internal-Token": internalToken },
+          body: JSON.stringify({ order_id: updated.id }),
+        }).catch(() => {});
+      }
+    }
+
     res.status(200).json({
       success: true,
       status: "OK",

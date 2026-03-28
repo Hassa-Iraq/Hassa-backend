@@ -7,8 +7,7 @@ export type OrderStatus =
   | "ready_for_pickup"
   | "out_for_delivery"
   | "delivered"
-  | "cancelled"
-  | "rejected";
+  | "cancelled";
 
 export interface OrderRow {
   id: string;
@@ -559,7 +558,6 @@ export async function updateStatus(id: string, status: OrderStatus): Promise<Ord
     out_for_delivery: "out_for_delivery_at",
     delivered: "delivered_at",
     cancelled: "cancelled_at",
-    rejected: "cancelled_at",
   };
 
   const timeColumn = statusToTimeColumn[status];

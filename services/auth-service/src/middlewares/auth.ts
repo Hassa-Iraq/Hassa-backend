@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { verifyToken } from "../utils/jwt";
+import config from "../config/index";
 
 export interface AuthRequest extends Request {
   user?: {
@@ -18,6 +19,17 @@ export function authenticate(
   res: Response,
   next: NextFunction
 ): void {
+  const internalToken = req.headers["x-internal-token"];
+  if (
+    typeof internalToken === "string" &&
+    config.INTERNAL_SERVICE_TOKEN &&
+    internalToken === config.INTERNAL_SERVICE_TOKEN
+  ) {
+    req.user = { id: "internal", role: "admin", email: "internal@system" };
+    next();
+    return;
+  }
+
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {

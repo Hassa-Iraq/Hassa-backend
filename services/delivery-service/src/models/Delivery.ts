@@ -16,7 +16,7 @@ export interface DeliveryRow {
   order_id: string;
   customer_user_id: string;
   restaurant_id: string;
-  driver_user_id: string;
+  driver_user_id: string | null;
   status: DeliveryStatus;
   pickup_address: string | null;
   dropoff_address: string | null;
@@ -27,6 +27,8 @@ export interface DeliveryRow {
   delivery_notes: string | null;
   proof_image_url: string | null;
   assigned_at: Date;
+  assignment_expires_at?: Date | null;
+  attempted_driver_ids?: unknown;
   accepted_at: Date | null;
   picked_up_at: Date | null;
   delivered_at: Date | null;
@@ -50,7 +52,7 @@ export interface CreateDeliveryInput {
   order_id: string;
   customer_user_id: string;
   restaurant_id: string;
-  driver_user_id: string;
+  driver_user_id?: string | null;
   pickup_address?: string | null;
   dropoff_address?: string | null;
   pickup_latitude?: number | null;
@@ -123,13 +125,14 @@ export async function create(input: CreateDeliveryInput): Promise<DeliveryRow> {
        order_id, customer_user_id, restaurant_id, driver_user_id, status,
        pickup_address, dropoff_address, pickup_latitude, pickup_longitude,
        dropoff_latitude, dropoff_longitude, delivery_notes, assigned_at
-     ) VALUES ($1, $2, $3, $4, 'assigned', $5, $6, $7, $8, $9, $10, $11, NOW())
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING *`,
     [
       input.order_id,
       input.customer_user_id,
       input.restaurant_id,
-      input.driver_user_id,
+      input.driver_user_id ?? null,
+      input.driver_user_id ? "assigned" : "pending_assignment",
       input.pickup_address ?? null,
       input.dropoff_address ?? null,
       input.pickup_latitude ?? null,
@@ -137,9 +140,69 @@ export async function create(input: CreateDeliveryInput): Promise<DeliveryRow> {
       input.dropoff_latitude ?? null,
       input.dropoff_longitude ?? null,
       input.delivery_notes ?? null,
+      input.driver_user_id ? new Date() : null,
     ]
   );
   return r.rows[0] as DeliveryRow;
+}
+
+export async function setAssignment(params: {
+  id: string;
+  driver_user_id: string;
+  assignment_expires_at: Date;
+  attempted_driver_ids: string[];
+}): Promise<DeliveryRow | null> {
+  const r = await pool.query(
+    `UPDATE delivery.deliveries
+     SET driver_user_id = $1,
+         status = 'assigned',
+         assigned_at = NOW(),
+         assignment_expires_at = $2,
+         attempted_driver_ids = $3::jsonb
+     WHERE id = $4
+     RETURNING *`,
+    [params.driver_user_id, params.assignment_expires_at, JSON.stringify(params.attempted_driver_ids), params.id]
+  );
+  return (r.rows[0] as DeliveryRow | undefined) ?? null;
+}
+
+export async function markPendingAssignment(params: {
+  id: string;
+  attempted_driver_ids: string[];
+}): Promise<DeliveryRow | null> {
+  const r = await pool.query(
+    `UPDATE delivery.deliveries
+     SET driver_user_id = NULL,
+         status = 'pending_assignment',
+         assignment_expires_at = NULL
+     WHERE id = $1
+     RETURNING *`,
+    [params.id]
+  );
+  const row = (r.rows[0] as DeliveryRow | undefined) ?? null;
+  if (!row) return null;
+  await pool.query(
+    `UPDATE delivery.deliveries
+     SET attempted_driver_ids = $2::jsonb
+     WHERE id = $1`,
+    [params.id, JSON.stringify(params.attempted_driver_ids)]
+  );
+  return await findById(params.id);
+}
+
+export async function listExpiredAssignments(now: Date, limit = 50): Promise<DeliveryRow[]> {
+  const r = await pool.query(
+    `SELECT *
+     FROM delivery.deliveries
+     WHERE status = 'assigned'
+       AND accepted_at IS NULL
+       AND assignment_expires_at IS NOT NULL
+       AND assignment_expires_at <= $1
+     ORDER BY assignment_expires_at ASC
+     LIMIT $2`,
+    [now, limit]
+  );
+  return r.rows as DeliveryRow[];
 }
 
 export async function findById(id: string): Promise<DeliveryRow | null> {

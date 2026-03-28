@@ -5,7 +5,7 @@ import { AuthRequest } from "../middleware/auth";
 
 const ALLOWED_NEXT_STATUSES: Record<Delivery.DeliveryStatus, Delivery.DeliveryStatus[]> = {
   pending_assignment: ["assigned", "cancelled"],
-  assigned: ["accepted_by_driver", "cancelled", "failed"],
+  assigned: ["accepted_by_driver", "cancelled", "failed", "pending_assignment"],
   accepted_by_driver: ["arrived_at_pickup", "cancelled", "failed"],
   arrived_at_pickup: ["picked_up", "cancelled", "failed"],
   picked_up: ["on_the_way", "cancelled", "failed"],
@@ -14,6 +14,8 @@ const ALLOWED_NEXT_STATUSES: Record<Delivery.DeliveryStatus, Delivery.DeliverySt
   cancelled: [],
   failed: [],
 };
+
+const ASSIGNMENT_TIMEOUT_SECONDS = 45;
 
 type OrderApiResponse = {
   success?: boolean;
@@ -53,12 +55,17 @@ type DriverApiResponse = {
   };
 };
 
+function internalAuthHeaders(): Record<string, string> {
+  return config.INTERNAL_SERVICE_TOKEN ? { "X-Internal-Token": config.INTERNAL_SERVICE_TOKEN } : {};
+}
+
 async function getOrderById(orderId: string, authHeader: string): Promise<OrderPayload> {
   const orderServiceUrl = config.ORDER_SERVICE_URL || "http://order-service:3003";
   const response = await fetch(`${orderServiceUrl}/orders/${orderId}`, {
     method: "GET",
     headers: {
-      Authorization: authHeader,
+      ...(authHeader ? { Authorization: authHeader } : {}),
+      ...internalAuthHeaders(),
     },
   });
   const json = (await response.json().catch(() => ({}))) as OrderApiResponse;
@@ -79,7 +86,8 @@ async function getDriverById(driverId: string, authHeader: string): Promise<{
   const response = await fetch(`${authServiceUrl}/auth/drivers/${driverId}`, {
     method: "GET",
     headers: {
-      Authorization: authHeader,
+      ...(authHeader ? { Authorization: authHeader } : {}),
+      ...internalAuthHeaders(),
     },
   });
   const json = (await response.json().catch(() => ({}))) as DriverApiResponse;
@@ -103,6 +111,174 @@ async function getOwnedRestaurantIds(authHeader: string): Promise<string[]> {
   };
   if (!response.ok || !json.success) return [];
   return (json.data?.restaurants ?? []).map((r) => r.id);
+}
+
+async function listCandidateDrivers(params: {
+  authHeader: string;
+  restaurant_id: string;
+  preferRestaurantDrivers: boolean;
+}): Promise<string[]> {
+  const authServiceUrl = config.AUTH_SERVICE_URL || "http://auth-service:3001";
+  const headers = { ...(params.authHeader ? { Authorization: params.authHeader } : {}), ...internalAuthHeaders() };
+
+  if (params.preferRestaurantDrivers) {
+    const r = await fetch(
+      `${authServiceUrl}/auth/drivers?page=1&limit=200&owner_type=restaurant&restaurant_id=${params.restaurant_id}&is_active=true`,
+      { method: "GET", headers }
+    );
+    const json = (await r.json().catch(() => ({}))) as { success?: boolean; data?: { drivers?: Array<{ id: string }> } };
+    const ids = (json.data?.drivers ?? []).map((d) => d.id).filter(Boolean);
+    if (r.ok && json.success && ids.length > 0) return ids;
+  }
+
+  const r2 = await fetch(
+    `${authServiceUrl}/auth/drivers?page=1&limit=200&owner_type=platform&is_active=true`,
+    { method: "GET", headers }
+  );
+  const json2 = (await r2.json().catch(() => ({}))) as { success?: boolean; data?: { drivers?: Array<{ id: string }> } };
+  return (json2.data?.drivers ?? []).map((d) => d.id).filter(Boolean);
+}
+
+async function pickAvailableDriver(params: {
+  candidate_driver_ids: string[];
+  attempted_driver_ids: string[];
+}): Promise<string | null> {
+  if (params.candidate_driver_ids.length === 0) return null;
+  const attempted = new Set(params.attempted_driver_ids);
+  const candidates = params.candidate_driver_ids.filter((id) => !attempted.has(id));
+  if (candidates.length === 0) return null;
+
+  const statuses = await Delivery.listDriverAvailability({ is_online: true, is_available: true, limit: 500, offset: 0 });
+  const availableSet = new Set(statuses.map((s) => s.driver_user_id));
+  const best = candidates.find((id) => availableSet.has(id));
+  return best ?? null;
+}
+
+async function autoAssignDeliveryRow(params: {
+  delivery: Delivery.DeliveryRow;
+  restaurant_id: string;
+  authHeader: string;
+}): Promise<Delivery.DeliveryRow | null> {
+  const rawAttempted = (params.delivery as any).attempted_driver_ids;
+  const attempted: string[] =
+    Array.isArray(rawAttempted) ? (rawAttempted as string[]) : (rawAttempted && typeof rawAttempted === "object" ? [] : []);
+
+  const candidates = await listCandidateDrivers({
+    authHeader: params.authHeader,
+    restaurant_id: params.restaurant_id,
+    preferRestaurantDrivers: true,
+  });
+  const picked = await pickAvailableDriver({
+    candidate_driver_ids: candidates,
+    attempted_driver_ids: attempted,
+  });
+  if (!picked) return null;
+
+  const nextAttempted = [...new Set([...attempted, picked])];
+  const expires = new Date(Date.now() + ASSIGNMENT_TIMEOUT_SECONDS * 1000);
+  const assigned = await Delivery.setAssignment({
+    id: params.delivery.id,
+    driver_user_id: picked,
+    assignment_expires_at: expires,
+    attempted_driver_ids: nextAttempted,
+  });
+  if (assigned) {
+    await Delivery.upsertDriverAvailability({ driver_user_id: picked, is_available: false });
+  }
+  return assigned;
+}
+
+export async function sweepExpiredAssignments(): Promise<void> {
+  const now = new Date();
+  const expired = await Delivery.listExpiredAssignments(now, 50);
+  if (expired.length === 0) return;
+
+  const authHeader = "";
+  for (const d of expired) {
+    const prev = d.driver_user_id;
+    if (prev) {
+      await Delivery.upsertDriverAvailability({ driver_user_id: prev, is_available: true });
+    }
+    const queued = await Delivery.markPendingAssignment({
+      id: d.id,
+      attempted_driver_ids: Array.isArray((d as any).attempted_driver_ids) ? (d as any).attempted_driver_ids : [],
+    });
+    if (!queued) continue;
+
+    await autoAssignDeliveryRow({
+      delivery: queued,
+      restaurant_id: queued.restaurant_id,
+      authHeader,
+    });
+  }
+}
+
+export async function autoAssignForOrder(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const body = req.body as Record<string, unknown>;
+    const orderId = body.order_id as string;
+    if (!orderId || typeof orderId !== "string") {
+      res.status(400).json({ success: false, status: "ERROR", message: "order_id is required", data: null });
+      return;
+    }
+
+    const authHeader = req.headers.authorization ?? "";
+
+    const order = await getOrderById(orderId, authHeader);
+    if (!order || order.status !== "confirmed") {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Order must be confirmed before driver assignment",
+        data: null,
+      });
+      return;
+    }
+
+    let delivery = await Delivery.findByOrderId(orderId);
+    if (!delivery) {
+      delivery = await Delivery.create({
+        order_id: order.id,
+        customer_user_id: order.user_id,
+        restaurant_id: order.restaurant_id,
+        driver_user_id: null,
+        dropoff_address:
+          typeof order.delivery_address?.line1 === "string" ? String(order.delivery_address.line1) : null,
+        dropoff_latitude: typeof order.delivery_address?.lat === "number" ? order.delivery_address.lat : null,
+        dropoff_longitude: typeof order.delivery_address?.lng === "number" ? order.delivery_address.lng : null,
+        delivery_notes: typeof order.notes === "string" ? order.notes : null,
+      });
+    }
+
+    const assigned = await autoAssignDeliveryRow({
+      delivery,
+      restaurant_id: order.restaurant_id,
+      authHeader,
+    });
+    if (!assigned) {
+      res.status(200).json({
+        success: true,
+        status: "OK",
+        message: "No available drivers right now",
+        data: { delivery: Delivery.toResponse(delivery) },
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Driver auto-assigned",
+      data: { delivery: Delivery.toResponse(assigned) },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to auto-assign driver",
+      data: null,
+    });
+  }
 }
 
 async function ensureDeliveryAccess(req: AuthRequest, res: Response, deliveryId: string): Promise<Delivery.DeliveryRow | null> {
@@ -431,6 +607,23 @@ export async function updateDeliveryStatus(req: AuthRequest, res: Response): Pro
     const delivery = await ensureDeliveryAccess(req, res, id);
     if (!delivery) return;
 
+    if (req.user?.role === "driver" && delivery.status === "assigned" && nextStatus === "pending_assignment") {
+      const attempted = Array.isArray((delivery as any).attempted_driver_ids)
+        ? ((delivery as any).attempted_driver_ids as string[])
+        : [];
+      const prev = delivery.driver_user_id;
+      const nextAttempted = prev ? [...new Set([...attempted, prev])] : attempted;
+      const queued = await Delivery.markPendingAssignment({ id: delivery.id, attempted_driver_ids: nextAttempted });
+      if (prev) await Delivery.upsertDriverAvailability({ driver_user_id: prev, is_available: true });
+      res.status(200).json({
+        success: true,
+        status: "OK",
+        message: "Assignment declined; re-queued for reassignment",
+        data: { delivery: queued ? Delivery.toResponse(queued) : Delivery.toResponse(delivery) },
+      });
+      return;
+    }
+
     const allowedNext = ALLOWED_NEXT_STATUSES[delivery.status] ?? [];
     if (!allowedNext.includes(nextStatus)) {
       res.status(400).json({
@@ -457,10 +650,12 @@ export async function updateDeliveryStatus(req: AuthRequest, res: Response): Pro
     }
 
     if (nextStatus === "delivered" || nextStatus === "cancelled" || nextStatus === "failed") {
-      await Delivery.upsertDriverAvailability({
-        driver_user_id: updated.driver_user_id,
-        is_available: true,
-      });
+      if (updated.driver_user_id) {
+        await Delivery.upsertDriverAvailability({
+          driver_user_id: updated.driver_user_id,
+          is_available: true,
+        });
+      }
     }
 
     res.status(200).json({
