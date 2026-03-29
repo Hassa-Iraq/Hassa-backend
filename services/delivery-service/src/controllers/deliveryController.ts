@@ -41,6 +41,29 @@ type OrderPayload = {
   notes?: string | null;
 };
 
+function deliveryAddressLineFromOrder(da: Record<string, unknown> | null | undefined): string | null {
+  if (!da) return null;
+  const line = da.complete_address;
+  if (typeof line === "string" && line.trim() !== "") return line;
+  const legacy = da.line1;
+  if (typeof legacy === "string" && legacy.trim() !== "") return legacy;
+  return null;
+}
+
+function latitudeFromOrderAddress(da: Record<string, unknown> | null | undefined): number | null {
+  if (!da) return null;
+  if (typeof da.latitude === "number" && !Number.isNaN(da.latitude)) return da.latitude;
+  if (typeof da.lat === "number" && !Number.isNaN(da.lat)) return da.lat;
+  return null;
+}
+
+function longitudeFromOrderAddress(da: Record<string, unknown> | null | undefined): number | null {
+  if (!da) return null;
+  if (typeof da.longitude === "number" && !Number.isNaN(da.longitude)) return da.longitude;
+  if (typeof da.lng === "number" && !Number.isNaN(da.lng)) return da.lng;
+  return null;
+}
+
 type DriverApiResponse = {
   success?: boolean;
   message?: string;
@@ -242,10 +265,9 @@ export async function autoAssignForOrder(req: AuthRequest, res: Response): Promi
         customer_user_id: order.user_id,
         restaurant_id: order.restaurant_id,
         driver_user_id: null,
-        dropoff_address:
-          typeof order.delivery_address?.line1 === "string" ? String(order.delivery_address.line1) : null,
-        dropoff_latitude: typeof order.delivery_address?.lat === "number" ? order.delivery_address.lat : null,
-        dropoff_longitude: typeof order.delivery_address?.lng === "number" ? order.delivery_address.lng : null,
+        delivery_address: deliveryAddressLineFromOrder(order.delivery_address ?? undefined),
+        delivery_latitude: latitudeFromOrderAddress(order.delivery_address ?? undefined),
+        delivery_longitude: longitudeFromOrderAddress(order.delivery_address ?? undefined),
         delivery_notes: typeof order.notes === "string" ? order.notes : null,
       });
     }
@@ -445,19 +467,24 @@ export async function assignDriver(req: AuthRequest, res: Response): Promise<voi
       restaurant_id: order.restaurant_id,
       driver_user_id: driverUserId,
       pickup_address: (body.pickup_address as string) ?? null,
-      dropoff_address:
-        (body.dropoff_address as string) ??
-        (typeof order.delivery_address?.line1 === "string" ? String(order.delivery_address.line1) : null),
+      delivery_address:
+        (typeof body.delivery_address === "string" ? body.delivery_address : null) ??
+        (typeof body.dropoff_address === "string" ? body.dropoff_address : null) ??
+        deliveryAddressLineFromOrder(order.delivery_address ?? undefined),
       pickup_latitude: typeof body.pickup_latitude === "number" ? body.pickup_latitude : null,
       pickup_longitude: typeof body.pickup_longitude === "number" ? body.pickup_longitude : null,
-      dropoff_latitude:
-        typeof body.dropoff_latitude === "number"
-          ? body.dropoff_latitude
-          : (typeof order.delivery_address?.lat === "number" ? order.delivery_address.lat : null),
-      dropoff_longitude:
-        typeof body.dropoff_longitude === "number"
-          ? body.dropoff_longitude
-          : (typeof order.delivery_address?.lng === "number" ? order.delivery_address.lng : null),
+      delivery_latitude:
+        typeof body.delivery_latitude === "number"
+          ? body.delivery_latitude
+          : typeof body.dropoff_latitude === "number"
+            ? body.dropoff_latitude
+            : latitudeFromOrderAddress(order.delivery_address ?? undefined),
+      delivery_longitude:
+        typeof body.delivery_longitude === "number"
+          ? body.delivery_longitude
+          : typeof body.dropoff_longitude === "number"
+            ? body.dropoff_longitude
+            : longitudeFromOrderAddress(order.delivery_address ?? undefined),
       delivery_notes:
         typeof body.delivery_notes === "string"
           ? body.delivery_notes

@@ -41,7 +41,6 @@ export function snapshotFromUserAddressRow(row: UserAddressRow): Record<string, 
     longitude: lng,
     lat,
     lng,
-    line1: row.complete_address,
   };
 }
 

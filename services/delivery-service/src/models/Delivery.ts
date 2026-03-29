@@ -19,11 +19,11 @@ export interface DeliveryRow {
   driver_user_id: string | null;
   status: DeliveryStatus;
   pickup_address: string | null;
-  dropoff_address: string | null;
+  delivery_address: string | null;
   pickup_latitude: string | null;
   pickup_longitude: string | null;
-  dropoff_latitude: string | null;
-  dropoff_longitude: string | null;
+  delivery_latitude: string | null;
+  delivery_longitude: string | null;
   delivery_notes: string | null;
   proof_image_url: string | null;
   assigned_at: Date;
@@ -54,11 +54,11 @@ export interface CreateDeliveryInput {
   restaurant_id: string;
   driver_user_id?: string | null;
   pickup_address?: string | null;
-  dropoff_address?: string | null;
+  delivery_address?: string | null;
   pickup_latitude?: number | null;
   pickup_longitude?: number | null;
-  dropoff_latitude?: number | null;
-  dropoff_longitude?: number | null;
+  delivery_latitude?: number | null;
+  delivery_longitude?: number | null;
   delivery_notes?: string | null;
 }
 
@@ -123,8 +123,8 @@ export async function create(input: CreateDeliveryInput): Promise<DeliveryRow> {
   const r = await pool.query(
     `INSERT INTO delivery.deliveries (
        order_id, customer_user_id, restaurant_id, driver_user_id, status,
-       pickup_address, dropoff_address, pickup_latitude, pickup_longitude,
-       dropoff_latitude, dropoff_longitude, delivery_notes, assigned_at
+       pickup_address, delivery_address, pickup_latitude, pickup_longitude,
+       delivery_latitude, delivery_longitude, delivery_notes, assigned_at
      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING *`,
     [
@@ -134,11 +134,11 @@ export async function create(input: CreateDeliveryInput): Promise<DeliveryRow> {
       input.driver_user_id ?? null,
       input.driver_user_id ? "assigned" : "pending_assignment",
       input.pickup_address ?? null,
-      input.dropoff_address ?? null,
+      input.delivery_address ?? null,
       input.pickup_latitude ?? null,
       input.pickup_longitude ?? null,
-      input.dropoff_latitude ?? null,
-      input.dropoff_longitude ?? null,
+      input.delivery_latitude ?? null,
+      input.delivery_longitude ?? null,
       input.delivery_notes ?? null,
       input.driver_user_id ? new Date() : null,
     ]
@@ -381,11 +381,11 @@ export function toResponse(row: DeliveryRow): Record<string, unknown> {
     driver_user_id: row.driver_user_id,
     status: row.status,
     pickup_address: row.pickup_address,
-    dropoff_address: row.dropoff_address,
+    delivery_address: row.delivery_address,
     pickup_latitude: row.pickup_latitude != null ? parseFloat(String(row.pickup_latitude)) : null,
     pickup_longitude: row.pickup_longitude != null ? parseFloat(String(row.pickup_longitude)) : null,
-    dropoff_latitude: row.dropoff_latitude != null ? parseFloat(String(row.dropoff_latitude)) : null,
-    dropoff_longitude: row.dropoff_longitude != null ? parseFloat(String(row.dropoff_longitude)) : null,
+    delivery_latitude: row.delivery_latitude != null ? parseFloat(String(row.delivery_latitude)) : null,
+    delivery_longitude: row.delivery_longitude != null ? parseFloat(String(row.delivery_longitude)) : null,
     delivery_notes: row.delivery_notes,
     proof_image_url: row.proof_image_url,
     assigned_at: row.assigned_at,
