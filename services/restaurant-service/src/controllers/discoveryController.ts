@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import pool from "../db/connection";
 import * as Banner from "../models/Banner";
 import * as Restaurant from "../models/Restaurant";
+import * as MenuItem from "../models/MenuItem";
 import { cache, cacheKeys } from "../utils/redis";
 import { AuthRequest } from "../middleware/auth";
 
@@ -204,9 +205,14 @@ export async function getHomeData(req: Request, res: Response): Promise<void> {
 
     const bannersLimit = Math.min(20, Math.max(1, parseInt(String(req.query.banners_limit)) || 10));
     const recommendedLimit = Math.min(20, Math.max(1, parseInt(String(req.query.recommended_limit)) || 10));
+    const topLimit = Math.min(20, Math.max(1, parseInt(String(req.query.top_limit)) || 10));
+    const dishesLimit = Math.min(50, Math.max(1, parseInt(String(req.query.dishes_limit)) || 10));
     const now = new Date();
 
     const bannersRows = await Banner.listPublic({ now, limit: bannersLimit, offset: 0 });
+    const topRestaurantsRows = await Restaurant.getTopNearby({ lat, lng, limit: topLimit });
+    const topRestaurantIds = topRestaurantsRows.map((r) => r.id);
+    const recommendedDishesRows = await MenuItem.getRecommendedDishes(topRestaurantIds, dishesLimit);
 
     const categoriesResult = await pool.query(
       `SELECT
@@ -293,6 +299,24 @@ export async function getHomeData(req: Request, res: Response): Promise<void> {
           rating: row.rating != null ? parseFloat(String(row.rating)) : 0,
           recommendation_score:
             row.recommendation_score != null ? parseFloat(String(row.recommendation_score)) : 0,
+        })),
+        top_restaurants: topRestaurantsRows.map((row) => ({
+          ...Restaurant.toResponse(row),
+          logo_url: normalizeImageUrl(row.logo_url),
+          cover_image_url: normalizeImageUrl(row.cover_image_url),
+          distance_km: parseFloat(String(row.distance_km)),
+          rating: parseFloat(String(row.rating)),
+        })),
+        recommended_dishes: recommendedDishesRows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          description: row.description,
+          price: parseFloat(row.price),
+          image_url: normalizeImageUrl(row.image_url),
+          restaurant_id: row.restaurant_id,
+          restaurant_name: row.restaurant_name,
+          category_id: row.category_id,
+          is_available: row.is_available,
         })),
       },
     });

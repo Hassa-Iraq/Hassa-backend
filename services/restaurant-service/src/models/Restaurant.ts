@@ -391,6 +391,34 @@ export async function listPublic(opts: {
   return r.rows;
 }
 
+export async function getTopNearby(params: {
+  lat: number;
+  lng: number;
+  limit: number;
+}): Promise<(RestaurantRow & { distance_km: number; rating: number })[]> {
+  const distanceSql = `(6371 * acos(LEAST(1, GREATEST(-1,
+    cos(radians($1)) * cos(radians(r.latitude::numeric)) *
+    cos(radians(r.longitude::numeric) - radians($2)) +
+    sin(radians($1)) * sin(radians(r.latitude::numeric))
+  ))))`;
+  const result = await pool.query(
+    `SELECT r.*,
+            ${distanceSql} AS distance_km,
+            COALESCE((r.additional_data ->> 'rating')::numeric, 0) AS rating
+     FROM restaurant.restaurants r
+     WHERE r.parent_id IS NULL
+       AND r.is_active = true
+       AND r.is_blocked = false
+       AND r.is_open = true
+       AND r.latitude IS NOT NULL
+       AND r.longitude IS NOT NULL
+     ORDER BY distance_km ASC, r.created_at DESC
+     LIMIT $3`,
+    [params.lat, params.lng, params.limit]
+  );
+  return result.rows;
+}
+
 export async function countPublic(): Promise<number> {
   const r = await pool.query(
     `SELECT COUNT(*)::int AS total FROM restaurant.restaurants

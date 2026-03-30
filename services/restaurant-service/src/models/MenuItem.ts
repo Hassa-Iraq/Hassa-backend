@@ -168,6 +168,25 @@ export async function update(id: string, params: UpdateMenuItemParams): Promise<
   return r.rows[0] ?? null;
 }
 
+export async function getRecommendedDishes(
+  restaurantIds: string[],
+  limit: number
+): Promise<(MenuItemRow & { restaurant_name: string })[]> {
+  if (restaurantIds.length === 0) return [];
+  const placeholders = restaurantIds.map((_, i) => `$${i + 1}`).join(", ");
+  const result = await pool.query(
+    `SELECT mi.*, r.name AS restaurant_name
+     FROM restaurant.menu_items mi
+     JOIN restaurant.restaurants r ON r.id = mi.restaurant_id
+     WHERE mi.restaurant_id IN (${placeholders})
+       AND mi.is_available = true
+     ORDER BY mi.display_order ASC, mi.created_at ASC
+     LIMIT $${restaurantIds.length + 1}`,
+    [...restaurantIds, limit]
+  );
+  return result.rows;
+}
+
 export async function deleteById(id: string): Promise<boolean> {
   const r = await pool.query("DELETE FROM restaurant.menu_items WHERE id = $1", [id]);
   return (r.rowCount ?? 0) > 0;
