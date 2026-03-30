@@ -3,6 +3,7 @@ import pool from "../db/connection";
 import * as Banner from "../models/Banner";
 import * as Restaurant from "../models/Restaurant";
 import * as MenuItem from "../models/MenuItem";
+import * as CuisineCategory from "../models/CuisineCategory";
 import { cache, cacheKeys } from "../utils/redis";
 import { AuthRequest } from "../middleware/auth";
 
@@ -210,32 +211,10 @@ export async function getHomeData(req: Request, res: Response): Promise<void> {
     const now = new Date();
 
     const bannersRows = await Banner.listPublic({ now, limit: bannersLimit, offset: 0 });
+    const cuisineCategoriesRows = await CuisineCategory.listPublic();
     const topRestaurantsRows = await Restaurant.getTopNearby({ lat, lng, limit: topLimit });
     const topRestaurantIds = topRestaurantsRows.map((r) => r.id);
     const recommendedDishesRows = await MenuItem.getRecommendedDishes(topRestaurantIds, dishesLimit);
-
-    const categoriesResult = await pool.query(
-      `SELECT
-         c.id,
-         c.name,
-         c.image_url,
-         COUNT(mi.id)::int AS items_count
-       FROM restaurant.menu_categories c
-       JOIN restaurant.restaurants r
-         ON r.id = c.restaurant_id
-        AND r.parent_id IS NULL
-        AND r.is_active = true
-        AND r.is_blocked = false
-        AND r.is_open = true
-       LEFT JOIN restaurant.menu_items mi
-         ON mi.category_id = c.id
-        AND mi.is_available = true
-       WHERE c.is_active = true
-         AND c.parent_id IS NULL
-       GROUP BY c.id, c.name, c.image_url
-       ORDER BY items_count DESC, c.name ASC
-       LIMIT 20`
-    );
 
     const distanceSql = getDistanceSql("r");
     const recommendedResult = await pool.query(
@@ -287,9 +266,11 @@ export async function getHomeData(req: Request, res: Response): Promise<void> {
           valid_to: row.valid_to,
           restaurant_name: row.restaurant_name,
         })),
-        categories: categoriesResult.rows.map((row) => ({
-          ...row,
+        cuisine_categories: cuisineCategoriesRows.map((row) => ({
+          id: row.id,
+          name: row.name,
           image_url: normalizeImageUrl(row.image_url),
+          display_order: row.display_order,
         })),
         recommended_restaurants: recommendedResult.rows.map((row) => ({
           ...Restaurant.toResponse(row),
