@@ -53,31 +53,31 @@ export async function listRestaurants(req: Request, res: Response): Promise<void
 
     const lat = parseCoordinate(req.query.lat ?? req.query.latitude);
     const lng = parseCoordinate(req.query.lng ?? req.query.longitude);
+    const cuisine = typeof req.query.cuisine === "string" ? req.query.cuisine.trim() : undefined;
     const hasLocation = lat != null && lng != null;
 
     let data: Record<string, unknown>;
     if (!hasLocation) {
-      const cacheKey = cacheKeys.restaurantList(page, limit);
-      const cached = await cache.get<{ restaurants: unknown[]; pagination: unknown }>(cacheKey);
-      if (cached) {
-        res.status(200).json({
-          success: true,
-          status: "OK",
-          message: "Restaurants listed",
-          data: cached,
-        });
-        return;
+      const cacheKey = cuisine ? null : cacheKeys.restaurantList(page, limit);
+      if (cacheKey) {
+        const cached = await cache.get<{ restaurants: unknown[]; pagination: unknown }>(cacheKey);
+        if (cached) {
+          res.status(200).json({ success: true, status: "OK", message: "Restaurants listed", data: cached });
+          return;
+        }
       }
 
-      const rows = await Restaurant.listPublic({ limit, offset });
-      const total = await Restaurant.countPublic();
+      const rows = await Restaurant.listPublic({ limit, offset, cuisine });
+      const total = await Restaurant.countPublic({ cuisine });
       data = {
         restaurants: rows.map(Restaurant.toResponse),
         pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
       };
-      await cache.set(cacheKey, data, 300);
+      if (cacheKey) await cache.set(cacheKey, data, 300);
     } else {
       const distanceSql = getDistanceSql("r");
+      const cuisineCondition = cuisine ? `AND r.cuisine ILIKE $5` : "";
+      const cuisineValue = cuisine ? [cuisine] : [];
       const rowsResult = await pool.query(
         `SELECT r.*,
                 ${distanceSql} AS distance_km
@@ -88,9 +88,10 @@ export async function listRestaurants(req: Request, res: Response): Promise<void
            AND r.is_open = true
            AND r.latitude IS NOT NULL
            AND r.longitude IS NOT NULL
+           ${cuisineCondition}
          ORDER BY distance_km ASC, r.created_at DESC
          LIMIT $3 OFFSET $4`,
-        [lat, lng, limit, offset]
+        [lat, lng, limit, offset, ...cuisineValue]
       );
       const countResult = await pool.query(
         `SELECT COUNT(*)::int AS total
@@ -100,7 +101,9 @@ export async function listRestaurants(req: Request, res: Response): Promise<void
            AND r.is_blocked = false
            AND r.is_open = true
            AND r.latitude IS NOT NULL
-           AND r.longitude IS NOT NULL`
+           AND r.longitude IS NOT NULL
+           ${cuisine ? `AND r.cuisine ILIKE $1` : ""}`,
+        cuisine ? [cuisine] : []
       );
       const total = countResult.rows[0]?.total ?? 0;
       data = {
