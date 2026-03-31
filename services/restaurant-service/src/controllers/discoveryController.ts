@@ -4,6 +4,7 @@ import * as Banner from "../models/Banner";
 import * as Restaurant from "../models/Restaurant";
 import * as MenuItem from "../models/MenuItem";
 import * as CuisineCategory from "../models/CuisineCategory";
+import * as MenuItemOption from "../models/MenuItemOption";
 import { cache, cacheKeys } from "../utils/redis";
 import { AuthRequest } from "../middleware/auth";
 
@@ -559,17 +560,33 @@ export async function getRestaurantWithMenu(req: Request, res: Response): Promis
       return;
     }
 
+    const allItemIds: string[] = [];
+    for (const cat of categoriesResult.rows) {
+      for (const item of (cat.items as Array<{ id: string }> | null) ?? []) {
+        allItemIds.push(item.id);
+      }
+    }
+    for (const item of uncategorizedResult.rows as Array<{ id: string }>) {
+      allItemIds.push(item.id);
+    }
+    const optionGroupsByItem = await MenuItemOption.listGroupsByItemIds(allItemIds);
+
+    const attachOptions = (item: Record<string, unknown>) => ({
+      ...item,
+      option_groups: (optionGroupsByItem.get(item.id as string) ?? []).map(MenuItemOption.groupToResponse),
+    });
+
     const data = {
       restaurant: {
         ...Restaurant.toResponse(restaurantRow),
         branches_count: branchCountResult.rows[0]?.total ?? 0,
       },
       menu: {
-        categories: categoriesResult.rows.map((r: { items?: unknown }) => ({
+        categories: categoriesResult.rows.map((r: { items?: Array<Record<string, unknown>> }) => ({
           ...r,
-          items: r.items ?? [],
+          items: (r.items ?? []).map(attachOptions),
         })),
-        uncategorized_items: uncategorizedResult.rows,
+        uncategorized_items: (uncategorizedResult.rows as Array<Record<string, unknown>>).map(attachOptions),
       },
     };
     await cache.set(cacheKey, data, 300);
@@ -642,13 +659,30 @@ export async function getRestaurantMenu(req: Request, res: Response): Promise<vo
        ORDER BY display_order ASC, created_at ASC`,
       [id]
     );
+
+    const allItemIds: string[] = [];
+    for (const cat of categoriesResult.rows) {
+      for (const item of (cat.items as Array<{ id: string }> | null) ?? []) {
+        allItemIds.push(item.id);
+      }
+    }
+    for (const item of uncategorizedResult.rows as Array<{ id: string }>) {
+      allItemIds.push(item.id);
+    }
+    const optionGroupsByItem = await MenuItemOption.listGroupsByItemIds(allItemIds);
+
+    const attachOptions = (item: Record<string, unknown>) => ({
+      ...item,
+      option_groups: (optionGroupsByItem.get(item.id as string) ?? []).map(MenuItemOption.groupToResponse),
+    });
+
     const data = {
       restaurant: { id: restaurantResult.rows[0].id, name: restaurantResult.rows[0].name },
-      categories: categoriesResult.rows.map((r: { items?: unknown }) => ({
+      categories: categoriesResult.rows.map((r: { items?: Array<Record<string, unknown>> }) => ({
         ...r,
-        items: r.items ?? [],
+        items: (r.items ?? []).map(attachOptions),
       })),
-      uncategorizedItems: uncategorizedResult.rows,
+      uncategorizedItems: (uncategorizedResult.rows as Array<Record<string, unknown>>).map(attachOptions),
     };
     await cache.set(cacheKey, data, 300);
     res.status(200).json({

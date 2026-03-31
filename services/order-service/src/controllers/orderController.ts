@@ -8,12 +8,32 @@ interface IncomingOrderItem {
   menu_item_id?: string;
   quantity?: number;
   special_instructions?: string | null;
+  selected_option_ids?: string[];
+}
+
+interface OptionInfo {
+  id: string;
+  group_id: string;
+  group_name: string;
+  name: string;
+  additional_price: number;
+  is_available: boolean;
+}
+
+interface OptionGroupInfo {
+  id: string;
+  name: string;
+  is_required: boolean;
+  min_selections: number;
+  max_selections: number;
+  options: OptionInfo[];
 }
 
 interface MenuItemInfo {
   id: string;
   name: string;
   price: number;
+  option_groups: OptionGroupInfo[];
 }
 
 const ALLOWED_NEXT_STATUSES: Record<Order.OrderStatus, Order.OrderStatus[]> = {
@@ -48,6 +68,20 @@ function parseMoney(value: unknown, defaultValue = 0): number {
   return defaultValue;
 }
 
+type RawMenuItem = {
+  id: string;
+  name: string;
+  price: number | string;
+  option_groups?: Array<{
+    id: string;
+    name: string;
+    is_required: boolean;
+    min_selections: number;
+    max_selections: number;
+    options: Array<{ id: string; name: string; additional_price: number | string; is_available: boolean }>;
+  }>;
+};
+
 async function fetchRestaurantMenu(restaurantId: string): Promise<Map<string, MenuItemInfo>> {
   const restaurantServiceUrl = config.RESTAURANT_SERVICE_URL || "http://restaurant-service:3002";
   const response = await fetch(`${restaurantServiceUrl}/discover/restaurants/${restaurantId}/menu`);
@@ -55,8 +89,8 @@ async function fetchRestaurantMenu(restaurantId: string): Promise<Map<string, Me
     success?: boolean;
     message?: string;
     data?: {
-      categories?: Array<{ items?: Array<{ id: string; name: string; price: number | string }> }>;
-      uncategorizedItems?: Array<{ id: string; name: string; price: number | string }>;
+      categories?: Array<{ items?: RawMenuItem[] }>;
+      uncategorizedItems?: RawMenuItem[];
     };
   };
 
@@ -65,21 +99,35 @@ async function fetchRestaurantMenu(restaurantId: string): Promise<Map<string, Me
   }
 
   const map = new Map<string, MenuItemInfo>();
+
+  const toMenuItemInfo = (item: RawMenuItem): MenuItemInfo => ({
+    id: item.id,
+    name: item.name,
+    price: parseMoney(item.price),
+    option_groups: (item.option_groups ?? []).map((g) => ({
+      id: g.id,
+      name: g.name,
+      is_required: g.is_required,
+      min_selections: g.min_selections,
+      max_selections: g.max_selections,
+      options: (g.options ?? []).map((o) => ({
+        id: o.id,
+        group_id: g.id,
+        group_name: g.name,
+        name: o.name,
+        additional_price: parseMoney(o.additional_price),
+        is_available: o.is_available,
+      })),
+    })),
+  });
+
   for (const category of json.data.categories ?? []) {
     for (const item of category.items ?? []) {
-      map.set(item.id, {
-        id: item.id,
-        name: item.name,
-        price: parseMoney(item.price),
-      });
+      map.set(item.id, toMenuItemInfo(item));
     }
   }
   for (const item of json.data.uncategorizedItems ?? []) {
-    map.set(item.id, {
-      id: item.id,
-      name: item.name,
-      price: parseMoney(item.price),
-    });
+    map.set(item.id, toMenuItemInfo(item));
   }
   return map;
 }
@@ -211,18 +259,81 @@ export async function createOrder(req: AuthRequest, res: Response): Promise<void
         });
         return;
       }
-      const lineTotal = Number((menuItem.price * quantity).toFixed(2));
+
+      const selectedOptionIds: string[] = Array.isArray(incomingItem.selected_option_ids)
+        ? incomingItem.selected_option_ids.filter((id) => typeof id === "string")
+        : [];
+
+      const allOptions = new Map<string, OptionInfo>();
+      for (const group of menuItem.option_groups) {
+        for (const opt of group.options) {
+          allOptions.set(opt.id, opt);
+        }
+      }
+
+      for (const optId of selectedOptionIds) {
+        const opt = allOptions.get(optId);
+        if (!opt || !opt.is_available) {
+          res.status(400).json({
+            success: false,
+            status: "ERROR",
+            message: `Option not available: ${optId}`,
+            data: null,
+          });
+          return;
+        }
+      }
+
+      for (const group of menuItem.option_groups) {
+        const groupOptionIds = new Set(group.options.map((o) => o.id));
+        const selectedInGroup = selectedOptionIds.filter((id) => groupOptionIds.has(id));
+        const count = selectedInGroup.length;
+
+        if (group.is_required && count < group.min_selections) {
+          res.status(400).json({
+            success: false,
+            status: "ERROR",
+            message: `"${group.name}" requires at least ${group.min_selections} selection(s)`,
+            data: null,
+          });
+          return;
+        }
+        if (count > group.max_selections) {
+          res.status(400).json({
+            success: false,
+            status: "ERROR",
+            message: `"${group.name}" allows at most ${group.max_selections} selection(s)`,
+            data: null,
+          });
+          return;
+        }
+      }
+
+      const selectedSnapshots: Order.SelectedOptionSnapshot[] = selectedOptionIds.map((optId) => {
+        const opt = allOptions.get(optId)!;
+        return {
+          option_id: opt.id,
+          group_id: opt.group_id,
+          group_name: opt.group_name,
+          option_name: opt.name,
+          additional_price: opt.additional_price,
+        };
+      });
+      const optionsAdditionalPrice = selectedSnapshots.reduce((sum, o) => sum + o.additional_price, 0);
+      const unitPriceWithOptions = Number((menuItem.price + optionsAdditionalPrice).toFixed(2));
+      const lineTotal = Number((unitPriceWithOptions * quantity).toFixed(2));
       subtotal += lineTotal;
       items.push({
         menu_item_id: menuItem.id,
         item_name: menuItem.name,
-        unit_price: menuItem.price,
+        unit_price: unitPriceWithOptions,
         quantity,
         line_total: lineTotal,
         special_instructions:
           typeof incomingItem.special_instructions === "string"
             ? incomingItem.special_instructions
             : null,
+        selected_options: selectedSnapshots,
       });
     }
 
@@ -650,7 +761,7 @@ export async function updateOrderStatus(req: AuthRequest, res: Response): Promis
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Internal-Token": internalToken },
           body: JSON.stringify({ order_id: updated.id }),
-        }).catch(() => {});
+        }).catch(() => { });
       }
     }
 

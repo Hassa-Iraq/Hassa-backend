@@ -35,6 +35,17 @@ export interface OrderRow {
   updated_at: Date;
 }
 
+export interface OrderItemSelectedOptionRow {
+  id: string;
+  order_item_id: string;
+  option_id: string;
+  group_id: string;
+  group_name: string;
+  option_name: string;
+  additional_price: string;
+  created_at: Date;
+}
+
 export interface OrderItemRow {
   id: string;
   order_id: string;
@@ -45,6 +56,7 @@ export interface OrderItemRow {
   line_total: string;
   special_instructions: string | null;
   created_at: Date;
+  selected_options?: OrderItemSelectedOptionRow[];
 }
 
 export interface OrderCustomerInfo {
@@ -93,6 +105,14 @@ export interface OrderDetailsRecord {
   restaurant: OrderRestaurantInfo | null;
 }
 
+export interface SelectedOptionSnapshot {
+  option_id: string;
+  group_id: string;
+  group_name: string;
+  option_name: string;
+  additional_price: number;
+}
+
 export interface CreateOrderItemInput {
   menu_item_id: string;
   item_name: string;
@@ -100,6 +120,7 @@ export interface CreateOrderItemInput {
   quantity: number;
   line_total: number;
   special_instructions?: string | null;
+  selected_options?: SelectedOptionSnapshot[];
 }
 
 export interface CreateOrderInput {
@@ -278,7 +299,21 @@ export async function create(input: CreateOrderInput): Promise<OrderWithItems> {
           item.special_instructions ?? null,
         ]
       );
-      itemRows.push(itemResult.rows[0] as OrderItemRow);
+      const orderItem = itemResult.rows[0] as OrderItemRow;
+
+      const selectedOptionRows: OrderItemSelectedOptionRow[] = [];
+      for (const opt of item.selected_options ?? []) {
+        const optResult = await client.query(
+          `INSERT INTO orders.order_item_selected_options
+             (order_item_id, option_id, group_id, group_name, option_name, additional_price)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING *`,
+          [orderItem.id, opt.option_id, opt.group_id, opt.group_name, opt.option_name, opt.additional_price]
+        );
+        selectedOptionRows.push(optResult.rows[0] as OrderItemSelectedOptionRow);
+      }
+      orderItem.selected_options = selectedOptionRows;
+      itemRows.push(orderItem);
     }
 
     await client.query("COMMIT");
@@ -312,7 +347,26 @@ export async function findItemsByOrderId(order_id: string): Promise<OrderItemRow
     "SELECT * FROM orders.order_items WHERE order_id = $1 ORDER BY created_at ASC",
     [order_id]
   );
-  return r.rows as OrderItemRow[];
+  const items = r.rows as OrderItemRow[];
+  if (items.length === 0) return items;
+
+  const itemIds = items.map((i) => i.id);
+  const optsResult = await pool.query<OrderItemSelectedOptionRow>(
+    `SELECT * FROM orders.order_item_selected_options
+     WHERE order_item_id = ANY($1::uuid[])
+     ORDER BY created_at ASC`,
+    [itemIds]
+  );
+  const optsByItem = new Map<string, OrderItemSelectedOptionRow[]>();
+  for (const opt of optsResult.rows) {
+    const arr = optsByItem.get(opt.order_item_id) ?? [];
+    arr.push(opt);
+    optsByItem.set(opt.order_item_id, arr);
+  }
+  for (const item of items) {
+    item.selected_options = optsByItem.get(item.id) ?? [];
+  }
+  return items;
 }
 
 export async function findEnrichedItemsByOrderId(order_id: string): Promise<EnrichedOrderItemRow[]> {
@@ -620,6 +674,13 @@ export function toResponse(order: OrderRow, items: OrderItemRow[]): Record<strin
       quantity: item.quantity,
       line_total: parseFloat(item.line_total),
       special_instructions: item.special_instructions,
+      selected_options: (item.selected_options ?? []).map((opt) => ({
+        option_id: opt.option_id,
+        group_id: opt.group_id,
+        group_name: opt.group_name,
+        option_name: opt.option_name,
+        additional_price: parseFloat(opt.additional_price),
+      })),
     })),
     created_at: order.created_at,
     updated_at: order.updated_at,
@@ -644,6 +705,13 @@ export function toDetailsResponse(
       quantity: item.quantity,
       line_total: parseFloat(item.line_total),
       special_instructions: item.special_instructions,
+      selected_options: (item.selected_options ?? []).map((opt) => ({
+        option_id: opt.option_id,
+        group_id: opt.group_id,
+        group_name: opt.group_name,
+        option_name: opt.option_name,
+        additional_price: parseFloat(opt.additional_price),
+      })),
       menu_item: {
         id: item.menu_item_id,
         name: item.menu_name,
