@@ -6,6 +6,7 @@ const router = express.Router();
 
 router.get("/restaurants", discoveryController.listRestaurants);
 router.get("/home", discoveryController.getHomeData);
+router.post("/cart/validate", discoveryController.validateCart);
 router.get("/restaurants/:id/details", discoveryController.getRestaurantWithMenu);
 router.get("/restaurants/:id/menu", discoveryController.getRestaurantMenu);
 router.get("/restaurants/:id", discoveryController.getRestaurantPublic);

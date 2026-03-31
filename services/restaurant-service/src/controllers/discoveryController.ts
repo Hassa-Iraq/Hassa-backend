@@ -700,3 +700,155 @@ export async function getRestaurantMenu(req: Request, res: Response): Promise<vo
     });
   }
 }
+
+interface CartItemInput {
+  menu_item_id: string;
+  item_name?: string;
+  unit_price: number;
+  selected_option_ids?: string[];
+}
+
+interface OptionChange {
+  option_id: string;
+  option_name: string;
+  change_type: "unavailable" | "price_changed";
+  old_price?: number;
+  new_price?: number;
+}
+
+interface CartItemResult {
+  menu_item_id: string;
+  item_name: string;
+  change_type: "unavailable" | "price_changed" | "ok";
+  old_base_price?: number;
+  new_base_price?: number;
+  option_changes: OptionChange[];
+}
+
+export async function validateCart(req: Request, res: Response): Promise<void> {
+  try {
+    const body = req.body as Record<string, unknown>;
+    const restaurantId = body.restaurant_id;
+    const incomingItems = body.items as CartItemInput[] | undefined;
+
+    if (!restaurantId || typeof restaurantId !== "string") {
+      res.status(400).json({ success: false, status: "ERROR", message: "restaurant_id is required", data: null });
+      return;
+    }
+    if (!Array.isArray(incomingItems) || incomingItems.length === 0) {
+      res.status(400).json({ success: false, status: "ERROR", message: "items must be a non-empty array", data: null });
+      return;
+    }
+
+    for (const item of incomingItems) {
+      if (!item.menu_item_id || typeof item.menu_item_id !== "string") {
+        res.status(400).json({ success: false, status: "ERROR", message: "Each item requires menu_item_id", data: null });
+        return;
+      }
+      if (typeof item.unit_price !== "number") {
+        res.status(400).json({ success: false, status: "ERROR", message: "Each item requires unit_price", data: null });
+        return;
+      }
+    }
+
+    const itemIds = incomingItems.map((i) => i.menu_item_id);
+    const freshItemsResult = await pool.query<{
+      id: string; name: string; price: string; is_available: boolean; restaurant_id: string;
+    }>(
+      `SELECT id, name, price, is_available, restaurant_id
+       FROM restaurant.menu_items
+       WHERE id = ANY($1::uuid[])`,
+      [itemIds]
+    );
+
+    const freshItemMap = new Map(freshItemsResult.rows.map((r) => [r.id, r]));
+    const allSelectedOptionIds = incomingItems.flatMap((i) =>
+      Array.isArray(i.selected_option_ids) ? i.selected_option_ids : []
+    );
+
+    const freshOptionsResult = allSelectedOptionIds.length > 0
+      ? await pool.query<{ id: string; group_id: string; name: string; additional_price: string; is_available: boolean }>(
+        `SELECT id, group_id, name, additional_price, is_available
+           FROM restaurant.menu_item_options
+           WHERE id = ANY($1::uuid[])`,
+        [allSelectedOptionIds]
+      )
+      : { rows: [] };
+
+    const freshOptionMap = new Map(freshOptionsResult.rows.map((o) => [o.id, o]));
+
+    const changes: CartItemResult[] = [];
+    let hasAnyChange = false;
+
+    for (const cartItem of incomingItems) {
+      const freshItem = freshItemMap.get(cartItem.menu_item_id);
+      const selectedOptionIds = Array.isArray(cartItem.selected_option_ids) ? cartItem.selected_option_ids : [];
+
+      if (!freshItem || !freshItem.is_available || freshItem.restaurant_id !== restaurantId) {
+        hasAnyChange = true;
+        changes.push({
+          menu_item_id: cartItem.menu_item_id,
+          item_name: cartItem.item_name ?? "Unknown item",
+          change_type: "unavailable",
+          option_changes: [],
+        });
+        continue;
+      }
+
+      const freshBasePrice = parseFloat(freshItem.price);
+      const optionChanges: OptionChange[] = [];
+
+      for (const optId of selectedOptionIds) {
+        const freshOpt = freshOptionMap.get(optId);
+        if (!freshOpt || !freshOpt.is_available) {
+          hasAnyChange = true;
+          optionChanges.push({
+            option_id: optId,
+            option_name: freshOpt?.name ?? "Unknown option",
+            change_type: "unavailable",
+          });
+        }
+      }
+
+      const freshOptionsTotal = selectedOptionIds.reduce((sum, optId) => {
+        const opt = freshOptionMap.get(optId);
+        return sum + (opt && opt.is_available ? parseFloat(opt.additional_price) : 0);
+      }, 0);
+      const freshUnitPrice = Number((freshBasePrice + freshOptionsTotal).toFixed(2));
+      const oldUnitPrice = Number(cartItem.unit_price.toFixed(2));
+
+      const priceChanged = Math.abs(freshUnitPrice - oldUnitPrice) > 0.01;
+      if (priceChanged) {
+        hasAnyChange = true;
+      }
+
+      if (priceChanged || optionChanges.length > 0) {
+        changes.push({
+          menu_item_id: cartItem.menu_item_id,
+          item_name: freshItem.name,
+          change_type: priceChanged ? "price_changed" : "ok",
+          old_base_price: priceChanged ? oldUnitPrice : undefined,
+          new_base_price: priceChanged ? freshUnitPrice : undefined,
+          option_changes: optionChanges,
+        });
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: hasAnyChange ? "Cart has changes" : "Cart is up to date",
+      data: {
+        valid: !hasAnyChange,
+        changes,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to validate cart",
+      data: null,
+    });
+  }
+}
