@@ -10,7 +10,8 @@
       "Read(//Users/ahsen/Downloads/food-app-main/shared/**)",
       "Bash(wc -l /Users/ahsen/Downloads/food-app-main/database/migrations/*.sql)",
       "Read(//^    \\\\{\\\\s*$/{getline; if \\(/^      \"\"\"\"\"\"\"\"name\"\"\"\"\"\"\"\":/**)",
-      "Bash(python3 -c \":*)"
+      "Bash(python3 -c \":*)",
+      "Bash(python3:*)"
     ]
   }
 }
