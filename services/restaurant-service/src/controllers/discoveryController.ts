@@ -852,3 +852,51 @@ export async function validateCart(req: Request, res: Response): Promise<void> {
     });
   }
 }
+
+export async function getMenuItemDetails(req: Request, res: Response): Promise<void> {
+  try {
+    const { id } = req.params as { id: string };
+
+    const item = await MenuItem.findById(id);
+    if (!item || !item.is_available) {
+      res.status(404).json({
+        success: false,
+        status: "ERROR",
+        message: "Menu item not found",
+        data: null,
+      });
+      return;
+    }
+
+    const optionGroups = await MenuItemOption.listGroupsByItemId(id);
+
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Menu item retrieved",
+      data: {
+        item: {
+          id: item.id,
+          restaurant_id: item.restaurant_id,
+          category_id: item.category_id,
+          name: item.name,
+          description: item.description,
+          price: parseFloat(item.price),
+          image_url: item.image_url,
+          nutrition: item.nutrition,
+          search_tags: item.search_tags,
+          is_available: item.is_available,
+          option_groups: optionGroups.map(MenuItemOption.groupToResponse),
+        },
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to fetch menu item",
+      data: null,
+    });
+  }
+}
+

@@ -5,6 +5,7 @@ import { authenticate, authorize } from "../middleware/auth";
 const router = express.Router();
 
 router.get("/restaurants", discoveryController.listRestaurants);
+router.get("/menu-items/:id", discoveryController.getMenuItemDetails);
 router.get("/home", discoveryController.getHomeData);
 router.post("/cart/validate", discoveryController.validateCart);
 router.get("/restaurants/:id/details", discoveryController.getRestaurantWithMenu);
