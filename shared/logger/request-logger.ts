@@ -9,12 +9,8 @@ export function requestLogger(req: RequestWithLogger, res: Response, next: NextF
   if (!req.logger) {
     return next();
   }
-
-  // Capture logger reference to avoid closure issues
   const logger = req.logger;
   const startTime = Date.now();
-
-  // Log incoming request (Pino logger always has info method)
   logger.info(
     {
       method: req.method,
@@ -27,7 +23,6 @@ export function requestLogger(req: RequestWithLogger, res: Response, next: NextF
     'Incoming request'
   );
 
-  // Capture response finish event
   res.on('finish', () => {
     if (!logger) {
       return;
@@ -44,13 +39,11 @@ export function requestLogger(req: RequestWithLogger, res: Response, next: NextF
       ip: req.ip || req.socket.remoteAddress,
     };
 
-    // Add user info if available
     if (req.user) {
       logData.userId = req.user.id;
       logData.userRole = req.user.role;
     }
 
-    // Log based on status code (Pino logger always has these methods)
     if (res.statusCode >= 500) {
       logger.error(logData, 'Request completed with server error');
     } else if (res.statusCode >= 400) {
@@ -59,7 +52,6 @@ export function requestLogger(req: RequestWithLogger, res: Response, next: NextF
       logger.info(logData, 'Request completed successfully');
     }
   });
-
   next();
 }
 

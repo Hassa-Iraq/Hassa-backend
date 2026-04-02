@@ -376,23 +376,23 @@ export const me = async (req: AuthRequest, res: Response) => {
     } | null = null;
     let employeeRoleData:
       | {
-          employee_role_id: string | null;
-          employee_role_name: string | null;
-          employee_permissions: Record<string, unknown> | null;
-          employee_is_active: boolean | null;
-        }
+        employee_role_id: string | null;
+        employee_role_name: string | null;
+        employee_permissions: Record<string, unknown> | null;
+        employee_is_active: boolean | null;
+      }
       | null = null;
     let driverData:
       | {
-          owner_type: DriverProfile.DriverOwnerType;
-          owner_restaurant_id: string | null;
-          vehicle_type: string | null;
-          vehicle_number: string | null;
-          vehicle_image_url: string | null;
-          driving_license_image_url: string | null;
-          additional_data: Record<string, unknown>;
-          is_active: boolean;
-        }
+        owner_type: DriverProfile.DriverOwnerType;
+        owner_restaurant_id: string | null;
+        vehicle_type: string | null;
+        vehicle_number: string | null;
+        vehicle_image_url: string | null;
+        driving_license_image_url: string | null;
+        additional_data: Record<string, unknown>;
+        is_active: boolean;
+      }
       | null = null;
 
     if ((user.role ?? "").toLowerCase() === "restaurant") {
@@ -2068,15 +2068,6 @@ export const getDriverById = async (req: AuthRequest, res: Response) => {
         success: false,
         status: "ERROR",
         message: "Driver not found",
-        data: null,
-      });
-    }
-
-    if (req.user?.role === "driver" && req.user.id !== id) {
-      return res.status(403).json({
-        success: false,
-        status: "ERROR",
-        message: "You do not have permission to view this driver",
         data: null,
       });
     }

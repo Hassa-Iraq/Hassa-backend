@@ -7,19 +7,25 @@
  * and injects `url.query` so params are reliably imported.
  *
  * Usage:
- *   node scripts/normalize-postman-query.js [path-to-collection-json]
+ *   node scripts/normalize-postman-query.js [source-collection-json] [output-collection-json]
  *
- * Default path:
+ * Default source path:
  *   postman/Food-App-API.postman_collection.json
+ *
+ * Default output path:
+ *   postman/Food-App-API.apidog.postman_collection.json
  */
 
 const { readFileSync, writeFileSync } = require("fs");
 const { join } = require("path");
 
 const rootDir = join(__dirname, "..");
-const targetPath =
+const sourcePath =
   process.argv[2] ??
   join(rootDir, "postman", "Food-App-API.postman_collection.json");
+const outputPath =
+  process.argv[3] ??
+  join(rootDir, "postman", "Food-App-API.apidog.postman_collection.json");
 
 function getRawUrl(url) {
   if (typeof url === "string") return url;
@@ -127,18 +133,19 @@ function walkItems(items, state) {
 }
 
 function run() {
-  const content = readFileSync(targetPath, "utf8");
+  const content = readFileSync(sourcePath, "utf8");
   const collection = JSON.parse(content);
   const state = { totalRequests: 0, updatedRequests: 0 };
 
   walkItems(collection.item, state);
 
-  writeFileSync(targetPath, `${JSON.stringify(collection, null, 2)}\n`, "utf8");
+  writeFileSync(outputPath, `${JSON.stringify(collection, null, 2)}\n`, "utf8");
 
   console.log(
     `Processed ${state.totalRequests} requests; normalized ${state.updatedRequests} request URLs with query params.`
   );
-  console.log(`Updated: ${targetPath}`);
+  console.log(`Source: ${sourcePath}`);
+  console.log(`Output: ${outputPath}`);
 }
 
 run();

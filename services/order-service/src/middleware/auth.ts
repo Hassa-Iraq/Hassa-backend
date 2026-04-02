@@ -17,6 +17,17 @@ export async function authenticate(
   next: NextFunction
 ): Promise<void> {
   try {
+    const internalToken = req.headers["x-internal-token"];
+    if (
+      typeof internalToken === "string" &&
+      config.INTERNAL_SERVICE_TOKEN &&
+      internalToken === config.INTERNAL_SERVICE_TOKEN
+    ) {
+      req.user = { id: "internal", role: "admin", email: "internal@system" };
+      next();
+      return;
+    }
+
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       res.status(401).json({

@@ -81,7 +81,7 @@ const migrationsDir = join(rootDir, "database", "migrations");
 const childEnv = { ...process.env, DATABASE_URL: databaseUrl };
 
 try {
-  const migrateConfig = `--migrations-dir "${migrationsDir}"`;
+  const migrateConfig = `--migrations-dir "${migrationsDir}" --migration-filename-format utc`;
   const fullCommand = `node-pg-migrate ${command} ${migrateConfig} ${args
     .slice(1)
     .join(" ")}`.trim();

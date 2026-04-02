@@ -7,6 +7,7 @@ import menuItemRoutes from "./routes/menu-items";
 import discoveryRoutes from "./routes/discovery";
 import searchRoutes from "./routes/search";
 import bannerRoutes from "./routes/banners";
+import cuisineCategoryRoutes from "./routes/cuisine-categories";
 import { BASE_UPLOAD_DIR } from "./utils/fileUpload";
 
 const app: Express = express();
@@ -37,6 +38,7 @@ app.use("/menu-items", menuItemRoutes);
 app.use("/discover", discoveryRoutes);
 app.use("/search", searchRoutes);
 app.use("/", bannerRoutes);
+app.use("/", cuisineCategoryRoutes);
 app.use("/", restaurantRoutes);
 
 export default app;

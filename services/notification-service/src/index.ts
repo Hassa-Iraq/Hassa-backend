@@ -3,16 +3,20 @@ import config from "./config/index";
 
 const PORT = config.PORT || 3006;
 
-app.listen(PORT, () => {
-  if (process.env.NODE_ENV !== "test") {
-    console.log(`Notification service listening on port ${PORT}`);
+async function startService() {
+  try {
+    app.listen(PORT, () => {
+      if (process.env.NODE_ENV !== "test") {
+        console.info(`Notification service listening on port ${PORT}`);
+      }
+    });
+  } catch (err) {
+    console.error("Failed to start notification service", err);
+    process.exit(1);
   }
-});
+}
 
-process.on("SIGTERM", () => {
-  process.exit(0);
-});
+startService();
 
-process.on("SIGINT", () => {
-  process.exit(0);
-});
+process.on("SIGTERM", () => process.exit(0));
+process.on("SIGINT", () => process.exit(0));

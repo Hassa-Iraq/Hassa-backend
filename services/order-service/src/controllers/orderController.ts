@@ -2,28 +2,48 @@ import { Response } from "express";
 import config from "../config/index";
 import * as Order from "../models/Order";
 import { AuthRequest } from "../middleware/auth";
+import * as DeliveryAddress from "../utils/deliveryAddress";
 
 interface IncomingOrderItem {
   menu_item_id?: string;
   quantity?: number;
   special_instructions?: string | null;
+  selected_option_ids?: string[];
+}
+
+interface OptionInfo {
+  id: string;
+  group_id: string;
+  group_name: string;
+  name: string;
+  additional_price: number;
+  is_available: boolean;
+}
+
+interface OptionGroupInfo {
+  id: string;
+  name: string;
+  is_required: boolean;
+  min_selections: number;
+  max_selections: number;
+  options: OptionInfo[];
 }
 
 interface MenuItemInfo {
   id: string;
   name: string;
   price: number;
+  option_groups: OptionGroupInfo[];
 }
 
 const ALLOWED_NEXT_STATUSES: Record<Order.OrderStatus, Order.OrderStatus[]> = {
-  pending: ["confirmed", "rejected", "cancelled"],
+  pending: ["confirmed", "cancelled"],
   confirmed: ["preparing", "cancelled"],
   preparing: ["ready_for_pickup", "cancelled"],
   ready_for_pickup: ["out_for_delivery", "cancelled"],
   out_for_delivery: ["delivered", "cancelled"],
   delivered: [],
   cancelled: [],
-  rejected: [],
 };
 
 const ORDER_LIST_STATUS_MAP: Record<string, Order.OrderStatus[] | null> = {
@@ -33,7 +53,7 @@ const ORDER_LIST_STATUS_MAP: Record<string, Order.OrderStatus[] | null> = {
   processing: ["preparing", "ready_for_pickup"],
   "food on the way": ["out_for_delivery"],
   delivered: ["delivered"],
-  cancelled: ["cancelled", "rejected"],
+  cancelled: ["cancelled"],
   "payment failed": null,
   refunded: null,
   "offline payments": null,
@@ -48,6 +68,20 @@ function parseMoney(value: unknown, defaultValue = 0): number {
   return defaultValue;
 }
 
+type RawMenuItem = {
+  id: string;
+  name: string;
+  price: number | string;
+  option_groups?: Array<{
+    id: string;
+    name: string;
+    is_required: boolean;
+    min_selections: number;
+    max_selections: number;
+    options: Array<{ id: string; name: string; additional_price: number | string; is_available: boolean }>;
+  }>;
+};
+
 async function fetchRestaurantMenu(restaurantId: string): Promise<Map<string, MenuItemInfo>> {
   const restaurantServiceUrl = config.RESTAURANT_SERVICE_URL || "http://restaurant-service:3002";
   const response = await fetch(`${restaurantServiceUrl}/discover/restaurants/${restaurantId}/menu`);
@@ -55,8 +89,8 @@ async function fetchRestaurantMenu(restaurantId: string): Promise<Map<string, Me
     success?: boolean;
     message?: string;
     data?: {
-      categories?: Array<{ items?: Array<{ id: string; name: string; price: number | string }> }>;
-      uncategorizedItems?: Array<{ id: string; name: string; price: number | string }>;
+      categories?: Array<{ items?: RawMenuItem[] }>;
+      uncategorizedItems?: RawMenuItem[];
     };
   };
 
@@ -65,21 +99,35 @@ async function fetchRestaurantMenu(restaurantId: string): Promise<Map<string, Me
   }
 
   const map = new Map<string, MenuItemInfo>();
+
+  const toMenuItemInfo = (item: RawMenuItem): MenuItemInfo => ({
+    id: item.id,
+    name: item.name,
+    price: parseMoney(item.price),
+    option_groups: (item.option_groups ?? []).map((g) => ({
+      id: g.id,
+      name: g.name,
+      is_required: g.is_required,
+      min_selections: g.min_selections,
+      max_selections: g.max_selections,
+      options: (g.options ?? []).map((o) => ({
+        id: o.id,
+        group_id: g.id,
+        group_name: g.name,
+        name: o.name,
+        additional_price: parseMoney(o.additional_price),
+        is_available: o.is_available,
+      })),
+    })),
+  });
+
   for (const category of json.data.categories ?? []) {
     for (const item of category.items ?? []) {
-      map.set(item.id, {
-        id: item.id,
-        name: item.name,
-        price: parseMoney(item.price),
-      });
+      map.set(item.id, toMenuItemInfo(item));
     }
   }
   for (const item of json.data.uncategorizedItems ?? []) {
-    map.set(item.id, {
-      id: item.id,
-      name: item.name,
-      price: parseMoney(item.price),
-    });
+    map.set(item.id, toMenuItemInfo(item));
   }
   return map;
 }
@@ -211,18 +259,81 @@ export async function createOrder(req: AuthRequest, res: Response): Promise<void
         });
         return;
       }
-      const lineTotal = Number((menuItem.price * quantity).toFixed(2));
+
+      const selectedOptionIds: string[] = Array.isArray(incomingItem.selected_option_ids)
+        ? incomingItem.selected_option_ids.filter((id) => typeof id === "string")
+        : [];
+
+      const allOptions = new Map<string, OptionInfo>();
+      for (const group of menuItem.option_groups) {
+        for (const opt of group.options) {
+          allOptions.set(opt.id, opt);
+        }
+      }
+
+      for (const optId of selectedOptionIds) {
+        const opt = allOptions.get(optId);
+        if (!opt || !opt.is_available) {
+          res.status(400).json({
+            success: false,
+            status: "ERROR",
+            message: `Option not available: ${optId}`,
+            data: null,
+          });
+          return;
+        }
+      }
+
+      for (const group of menuItem.option_groups) {
+        const groupOptionIds = new Set(group.options.map((o) => o.id));
+        const selectedInGroup = selectedOptionIds.filter((id) => groupOptionIds.has(id));
+        const count = selectedInGroup.length;
+
+        if (group.is_required && count < group.min_selections) {
+          res.status(400).json({
+            success: false,
+            status: "ERROR",
+            message: `"${group.name}" requires at least ${group.min_selections} selection(s)`,
+            data: null,
+          });
+          return;
+        }
+        if (count > group.max_selections) {
+          res.status(400).json({
+            success: false,
+            status: "ERROR",
+            message: `"${group.name}" allows at most ${group.max_selections} selection(s)`,
+            data: null,
+          });
+          return;
+        }
+      }
+
+      const selectedSnapshots: Order.SelectedOptionSnapshot[] = selectedOptionIds.map((optId) => {
+        const opt = allOptions.get(optId)!;
+        return {
+          option_id: opt.id,
+          group_id: opt.group_id,
+          group_name: opt.group_name,
+          option_name: opt.name,
+          additional_price: opt.additional_price,
+        };
+      });
+      const optionsAdditionalPrice = selectedSnapshots.reduce((sum, o) => sum + o.additional_price, 0);
+      const unitPriceWithOptions = Number((menuItem.price + optionsAdditionalPrice).toFixed(2));
+      const lineTotal = Number((unitPriceWithOptions * quantity).toFixed(2));
       subtotal += lineTotal;
       items.push({
         menu_item_id: menuItem.id,
         item_name: menuItem.name,
-        unit_price: menuItem.price,
+        unit_price: unitPriceWithOptions,
         quantity,
         line_total: lineTotal,
         special_instructions:
           typeof incomingItem.special_instructions === "string"
             ? incomingItem.special_instructions
             : null,
+        selected_options: selectedSnapshots,
       });
     }
 
@@ -240,6 +351,28 @@ export async function createOrder(req: AuthRequest, res: Response): Promise<void
       return;
     }
 
+    const addressId = body.address_id;
+    if (typeof addressId !== "string" || !addressId.trim()) {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "address_id is required (saved address from GET /auth/addresses)",
+        data: null,
+      });
+      return;
+    }
+    const trimmedAddressId = addressId.trim();
+    const ownedAddress = await DeliveryAddress.findUserAddressById(trimmedAddressId, req.user!.id);
+    if (!ownedAddress) {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "address_id is not a saved address for this user",
+        data: null,
+      });
+      return;
+    }
+
     const created = await Order.create({
       user_id: req.user!.id,
       restaurant_id: restaurantId,
@@ -250,18 +383,21 @@ export async function createOrder(req: AuthRequest, res: Response): Promise<void
       total_amount: totalAmount,
       currency: typeof body.currency === "string" && body.currency.trim() ? body.currency.trim() : "PKR",
       notes: typeof body.notes === "string" ? body.notes : null,
-      delivery_address:
-        typeof body.delivery_address === "object" && body.delivery_address != null
-          ? (body.delivery_address as Record<string, unknown>)
-          : null,
+      delivery_address_id: trimmedAddressId,
       items,
     });
+
+    const displayAddress = await DeliveryAddress.deliveryAddressForOrderResponse(created.order);
+    const orderForResponse = {
+      ...created.order,
+      delivery_address: (displayAddress ?? null) as Record<string, unknown> | null,
+    };
 
     res.status(201).json({
       success: true,
       status: "OK",
       message: "Order created successfully",
-      data: { order: Order.toResponse(created.order, created.items) },
+      data: { order: Order.toResponse(orderForResponse, created.items) },
     });
   } catch (err) {
     res.status(500).json({
@@ -279,12 +415,33 @@ export async function getOrderById(req: AuthRequest, res: Response): Promise<voi
     const order = await ensureOrderAccess(req, res, id);
     if (!order) return;
 
-    const items = await Order.findItemsByOrderId(order.id);
+    const details = await Order.findDetailsById(order.id);
+    if (!details) {
+      res.status(404).json({
+        success: false,
+        status: "ERROR",
+        message: "Order not found",
+        data: null,
+      });
+      return;
+    }
+    const resolvedDa = await DeliveryAddress.deliveryAddressForOrderResponse(details.order);
+    const orderForResponse = {
+      ...details.order,
+      delivery_address: (resolvedDa ?? null) as Record<string, unknown> | null,
+    };
     res.status(200).json({
       success: true,
       status: "OK",
       message: "Order retrieved",
-      data: { order: Order.toResponse(order, items) },
+      data: {
+        order: Order.toDetailsResponse(
+          orderForResponse,
+          details.items,
+          details.customer,
+          details.restaurant
+        ),
+      },
     });
   } catch (err) {
     res.status(500).json({
@@ -402,10 +559,35 @@ export async function listOrders(req: AuthRequest, res: Response): Promise<void>
       date_from: filters.date_from,
       date_to: filters.date_to,
     });
+    const uniqueUserIds = Array.from(new Set(rows.map((row) => row.user_id)));
+    const uniqueRestaurantIds = Array.from(
+      new Set(rows.map((row) => row.restaurant_id))
+    );
+
+    const [customers, restaurants, itemsPerOrder] = await Promise.all([
+      Order.findCustomersByIds(uniqueUserIds),
+      Order.findRestaurantsByIds(uniqueRestaurantIds),
+      Promise.all(rows.map((row) => Order.findItemsByOrderId(row.id))),
+    ]);
+
+    const customerMap = new Map(customers.map((customer) => [customer.id, customer]));
+    const restaurantMap = new Map(
+      restaurants.map((restaurant) => [restaurant.id, restaurant])
+    );
+
     const orders = await Promise.all(
-      rows.map(async (row) => {
-        const items = await Order.findItemsByOrderId(row.id);
-        return Order.toResponse(row, items);
+      rows.map(async (row, index) => {
+        const resolvedDa = await DeliveryAddress.deliveryAddressForOrderResponse(row);
+        const orderRow = {
+          ...row,
+          delivery_address: (resolvedDa ?? null) as Record<string, unknown> | null,
+        };
+        return Order.toResponseWithParties(
+          orderRow,
+          itemsPerOrder[index] ?? [],
+          customerMap.get(row.user_id) ?? null,
+          restaurantMap.get(row.restaurant_id) ?? null
+        );
       })
     );
 
@@ -571,6 +753,18 @@ export async function updateOrderStatus(req: AuthRequest, res: Response): Promis
       return;
     }
     const items = await Order.findItemsByOrderId(updated.id);
+    if (order.status === "pending" && nextStatus === "confirmed") {
+      const deliveryServiceUrl = config.DELIVERY_SERVICE_URL || "http://delivery-service:3004";
+      const internalToken = config.INTERNAL_SERVICE_TOKEN;
+      if (internalToken) {
+        fetch(`${deliveryServiceUrl}/deliveries/assignments/auto`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Internal-Token": internalToken },
+          body: JSON.stringify({ order_id: updated.id }),
+        }).catch(() => { });
+      }
+    }
+
     res.status(200).json({
       success: true,
       status: "OK",

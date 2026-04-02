@@ -381,20 +381,78 @@ export async function getAdminRestaurantStats(): Promise<AdminRestaurantStatsRow
 export async function listPublic(opts: {
   limit: number;
   offset: number;
+  cuisine?: string;
 }): Promise<RestaurantRow[]> {
+  const conditions = [
+    "parent_id IS NULL",
+    "is_active = true",
+    "is_blocked = false",
+    "is_open = true",
+  ];
+  const values: unknown[] = [];
+  let i = 1;
+
+  if (opts.cuisine) {
+    conditions.push(`cuisine ILIKE $${i++}`);
+    values.push(opts.cuisine);
+  }
+
+  values.push(opts.limit, opts.offset);
   const r = await pool.query(
     `SELECT * FROM restaurant.restaurants
-     WHERE parent_id IS NULL AND is_active = true AND is_blocked = false AND is_open = true
-     ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
-    [opts.limit, opts.offset]
+     WHERE ${conditions.join(" AND ")}
+     ORDER BY created_at DESC LIMIT $${i++} OFFSET $${i}`,
+    values
   );
   return r.rows;
 }
 
-export async function countPublic(): Promise<number> {
+export async function getTopNearby(params: {
+  lat: number;
+  lng: number;
+  limit: number;
+}): Promise<(RestaurantRow & { distance_km: number; rating: number })[]> {
+  const distanceSql = `(6371 * acos(LEAST(1, GREATEST(-1,
+    cos(radians($1)) * cos(radians(r.latitude::numeric)) *
+    cos(radians(r.longitude::numeric) - radians($2)) +
+    sin(radians($1)) * sin(radians(r.latitude::numeric))
+  ))))`;
+  const result = await pool.query(
+    `SELECT r.*,
+            ${distanceSql} AS distance_km,
+            COALESCE((r.additional_data ->> 'rating')::numeric, 0) AS rating
+     FROM restaurant.restaurants r
+     WHERE r.parent_id IS NULL
+       AND r.is_active = true
+       AND r.is_blocked = false
+       AND r.is_open = true
+       AND r.latitude IS NOT NULL
+       AND r.longitude IS NOT NULL
+     ORDER BY distance_km ASC, r.created_at DESC
+     LIMIT $3`,
+    [params.lat, params.lng, params.limit]
+  );
+  return result.rows;
+}
+
+export async function countPublic(opts?: { cuisine?: string }): Promise<number> {
+  const conditions = [
+    "parent_id IS NULL",
+    "is_active = true",
+    "is_blocked = false",
+    "is_open = true",
+  ];
+  const values: unknown[] = [];
+  let i = 1;
+
+  if (opts?.cuisine) {
+    conditions.push(`cuisine ILIKE $${i++}`);
+    values.push(opts.cuisine);
+  }
+
   const r = await pool.query(
-    `SELECT COUNT(*)::int AS total FROM restaurant.restaurants
-     WHERE parent_id IS NULL AND is_active = true AND is_blocked = false AND is_open = true`
+    `SELECT COUNT(*)::int AS total FROM restaurant.restaurants WHERE ${conditions.join(" AND ")}`,
+    values
   );
   return r.rows[0]?.total ?? 0;
 }
