@@ -351,26 +351,38 @@ export async function createOrder(req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const addressId = body.address_id;
-    if (typeof addressId !== "string" || !addressId.trim()) {
-      res.status(400).json({
-        success: false,
-        status: "ERROR",
-        message: "address_id is required (saved address from GET /auth/addresses)",
-        data: null,
-      });
-      return;
-    }
-    const trimmedAddressId = addressId.trim();
-    const ownedAddress = await DeliveryAddress.findUserAddressById(trimmedAddressId, req.user!.id);
-    if (!ownedAddress) {
-      res.status(400).json({
-        success: false,
-        status: "ERROR",
-        message: "address_id is not a saved address for this user",
-        data: null,
-      });
-      return;
+    const orderType = typeof body.order_type === "string" && ["delivery", "pickup"].includes(body.order_type)
+      ? body.order_type
+      : "delivery";
+
+    const paymentType = typeof body.payment_type === "string" && ["cash", "card", "wallet"].includes(body.payment_type)
+      ? body.payment_type
+      : "cash";
+
+    let resolvedAddressId: string | null = null;
+    if (orderType === "delivery") {
+      const addressId = body.address_id;
+      if (typeof addressId !== "string" || !addressId.trim()) {
+        res.status(400).json({
+          success: false,
+          status: "ERROR",
+          message: "address_id is required for delivery orders",
+          data: null,
+        });
+        return;
+      }
+      const trimmedAddressId = addressId.trim();
+      const ownedAddress = await DeliveryAddress.findUserAddressById(trimmedAddressId, req.user!.id);
+      if (!ownedAddress) {
+        res.status(400).json({
+          success: false,
+          status: "ERROR",
+          message: "address_id is not a saved address for this user",
+          data: null,
+        });
+        return;
+      }
+      resolvedAddressId = trimmedAddressId;
     }
 
     const created = await Order.create({
@@ -382,8 +394,10 @@ export async function createOrder(req: AuthRequest, res: Response): Promise<void
       discount_amount: discountAmount,
       total_amount: totalAmount,
       currency: typeof body.currency === "string" && body.currency.trim() ? body.currency.trim() : "PKR",
+      order_type: orderType,
+      payment_type: paymentType,
       notes: typeof body.notes === "string" ? body.notes : null,
-      delivery_address_id: trimmedAddressId,
+      delivery_address_id: resolvedAddressId,
       items,
     });
 
