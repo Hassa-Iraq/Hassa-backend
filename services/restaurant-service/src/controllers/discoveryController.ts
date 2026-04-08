@@ -508,7 +508,6 @@ async function getPopularItems(
   restaurantId: string,
   limit: number
 ): Promise<Array<Record<string, unknown>>> {
-  // Popularity = most ordered in the last 90 days, fallback to display_order
   const r = await pool.query(
     `SELECT
        mi.id, mi.name, mi.description, mi.price, mi.image_url,
