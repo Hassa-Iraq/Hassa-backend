@@ -1,6 +1,7 @@
 import express, { Express } from "express";
 import cors from "cors";
 import healthRoutes from "./routes/health";
+import internalRoutes from "./routes/internal";
 import restaurantRoutes from "./routes/restaurants";
 import menuCategoryRoutes from "./routes/menu-categories";
 import menuItemRoutes from "./routes/menu-items";
@@ -33,6 +34,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/uploads", express.static(BASE_UPLOAD_DIR));
 app.use("/", healthRoutes);
+app.use("/", internalRoutes);
 app.use("/menu-categories", menuCategoryRoutes);
 app.use("/menu-items", menuItemRoutes);
 app.use("/discover", discoveryRoutes);

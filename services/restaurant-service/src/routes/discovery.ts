@@ -10,6 +10,8 @@ router.get("/home", optionalAuthenticate, discoveryController.getHomeData);
 router.post("/cart/validate", discoveryController.validateCart);
 router.get("/restaurants/:id/details", optionalAuthenticate, discoveryController.getRestaurantWithMenu);
 router.get("/restaurants/:id/menu", discoveryController.getRestaurantMenu);
+router.get("/restaurants/:id/ratings", discoveryController.listRestaurantRatings);
+router.delete("/restaurants/:id/ratings/:ratingId", authenticate, authorize("admin"), discoveryController.adminDeleteRating);
 router.get("/restaurants/:id", optionalAuthenticate, discoveryController.getRestaurantPublic);
 router.get("/favorites", authenticate, authorize("customer", "admin"), discoveryController.listFavoriteRestaurants);
 router.post(

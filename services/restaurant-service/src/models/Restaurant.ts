@@ -31,6 +31,8 @@ export interface RestaurantRow {
   free_delivery_max_amount: string | null;
   free_delivery_min_distance_km: string | null;
   description: string | null;
+  rating_avg: string;
+  rating_count: number;
   created_at: Date;
   updated_at: Date;
 }
@@ -526,6 +528,8 @@ export function toResponse(row: RestaurantRow): Record<string, unknown> {
     free_delivery_max_amount: row.free_delivery_max_amount != null ? parseFloat(String(row.free_delivery_max_amount)) : null,
     free_delivery_min_distance_km: row.free_delivery_min_distance_km != null ? parseFloat(String(row.free_delivery_min_distance_km)) : null,
     description: row.description,
+    rating_avg: row.rating_avg != null ? parseFloat(String(row.rating_avg)) : 0,
+    rating_count: row.rating_count ?? 0,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
