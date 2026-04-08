@@ -5,6 +5,7 @@ import * as Restaurant from "../models/Restaurant";
 import * as MenuItem from "../models/MenuItem";
 import * as CuisineCategory from "../models/CuisineCategory";
 import * as MenuItemOption from "../models/MenuItemOption";
+import * as Rating from "../models/Rating";
 import { cache, cacheKeys } from "../utils/redis";
 import { AuthRequest } from "../middleware/auth";
 
@@ -166,9 +167,9 @@ export async function getRestaurantPublic(req: AuthRequest, res: Response): Prom
 
     const isFavorite = userId
       ? (await pool.query(
-          `SELECT 1 FROM restaurant.customer_favorite_restaurants WHERE user_id = $1 AND restaurant_id = $2`,
-          [userId, id]
-        )).rowCount! > 0
+        `SELECT 1 FROM restaurant.customer_favorite_restaurants WHERE user_id = $1 AND restaurant_id = $2`,
+        [userId, id]
+      )).rowCount! > 0
       : false;
 
     res.status(200).json({
@@ -503,6 +504,31 @@ export async function listFavoriteRestaurants(req: AuthRequest, res: Response): 
   }
 }
 
+async function getPopularItems(
+  restaurantId: string,
+  limit: number
+): Promise<Array<Record<string, unknown>>> {
+  // Popularity = most ordered in the last 90 days, fallback to display_order
+  const r = await pool.query(
+    `SELECT
+       mi.id, mi.name, mi.description, mi.price, mi.image_url,
+       mi.is_available, mi.display_order, mi.nutrition,
+       mi.search_tags, mi.category_id, mi.subcategory_id,
+       COALESCE(COUNT(oi.id), 0)::int AS order_count
+     FROM restaurant.menu_items mi
+     LEFT JOIN orders.order_items oi
+       ON oi.menu_item_id = mi.id
+      AND oi.created_at >= NOW() - INTERVAL '90 days'
+     WHERE mi.restaurant_id = $1
+       AND mi.is_available = true
+     GROUP BY mi.id
+     ORDER BY order_count DESC, mi.display_order ASC
+     LIMIT $2`,
+    [restaurantId, limit]
+  );
+  return r.rows as Array<Record<string, unknown>>;
+}
+
 export async function getRestaurantWithMenu(req: AuthRequest, res: Response): Promise<void> {
   try {
     const id = req.params.id as string;
@@ -510,17 +536,28 @@ export async function getRestaurantWithMenu(req: AuthRequest, res: Response): Pr
     const cacheKey = `restaurant:${id}:details`;
     const cached = await cache.get<{ restaurant: Record<string, unknown>; menu: unknown }>(cacheKey);
     if (cached) {
-      const isFavorite = userId
-        ? (await pool.query(
-            `SELECT 1 FROM restaurant.customer_favorite_restaurants WHERE user_id = $1 AND restaurant_id = $2`,
-            [userId, id]
-          )).rowCount! > 0
-        : false;
+      const [isFavorite, popularRows] = await Promise.all([
+        userId
+          ? pool.query(
+              `SELECT 1 FROM restaurant.customer_favorite_restaurants WHERE user_id = $1 AND restaurant_id = $2`,
+              [userId, id]
+            ).then((r) => r.rowCount! > 0)
+          : Promise.resolve(false),
+        getPopularItems(id, 10),
+      ]);
+      const popularIds = popularRows.map((r) => r.id as string);
+      const popularOptions = await MenuItemOption.listGroupsByItemIds(popularIds);
+      const popular_items = popularRows.map((item) => ({
+        ...item,
+        price: parseFloat(String(item.price)),
+        image_url: normalizeImageUrl(item.image_url),
+        option_groups: (popularOptions.get(item.id as string) ?? []).map(MenuItemOption.groupToResponse),
+      }));
       res.status(200).json({
         success: true,
         status: "OK",
         message: "Restaurant with menu retrieved",
-        data: { ...cached, restaurant: { ...cached.restaurant, is_favorite: isFavorite } },
+        data: { ...cached, restaurant: { ...cached.restaurant, is_favorite: isFavorite }, popular_items },
       });
       return;
     }
@@ -578,19 +615,31 @@ export async function getRestaurantWithMenu(req: AuthRequest, res: Response): Pr
     for (const item of uncategorizedResult.rows as Array<{ id: string }>) {
       allItemIds.push(item.id);
     }
-    const optionGroupsByItem = await MenuItemOption.listGroupsByItemIds(allItemIds);
+
+    const [optionGroupsByItem, popularRows, isFavorite] = await Promise.all([
+      MenuItemOption.listGroupsByItemIds(allItemIds),
+      getPopularItems(id, 10),
+      userId
+        ? pool.query(
+            `SELECT 1 FROM restaurant.customer_favorite_restaurants WHERE user_id = $1 AND restaurant_id = $2`,
+            [userId, id]
+          ).then((r) => r.rowCount! > 0)
+        : Promise.resolve(false),
+    ]);
 
     const attachOptions = (item: Record<string, unknown>) => ({
       ...item,
       option_groups: (optionGroupsByItem.get(item.id as string) ?? []).map(MenuItemOption.groupToResponse),
     });
 
-    const isFavorite = userId
-      ? (await pool.query(
-          `SELECT 1 FROM restaurant.customer_favorite_restaurants WHERE user_id = $1 AND restaurant_id = $2`,
-          [userId, id]
-        )).rowCount! > 0
-      : false;
+    const popularIds = popularRows.map((r) => r.id as string);
+    const popularOptions = await MenuItemOption.listGroupsByItemIds(popularIds);
+    const popular_items = popularRows.map((item) => ({
+      ...item,
+      price: parseFloat(String(item.price)),
+      image_url: normalizeImageUrl(item.image_url),
+      option_groups: (popularOptions.get(item.id as string) ?? []).map(MenuItemOption.groupToResponse),
+    }));
 
     const cacheableData = {
       restaurant: {
@@ -607,7 +656,7 @@ export async function getRestaurantWithMenu(req: AuthRequest, res: Response): Pr
     };
     await cache.set(cacheKey, cacheableData, 300);
 
-    const data = { ...cacheableData, restaurant: { ...cacheableData.restaurant, is_favorite: isFavorite } };
+    const data = { ...cacheableData, restaurant: { ...cacheableData.restaurant, is_favorite: isFavorite }, popular_items };
     res.status(200).json({
       success: true,
       status: "OK",
@@ -918,3 +967,64 @@ export async function getMenuItemDetails(req: Request, res: Response): Promise<v
   }
 }
 
+export async function listRestaurantRatings(req: Request, res: Response): Promise<void> {
+  try {
+    const restaurantId = req.params.id as string;
+    const page = Math.max(1, parseInt(String(req.query.page)) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit)) || 20));
+    const offset = (page - 1) * limit;
+
+    const restaurant = await Restaurant.findById(restaurantId);
+    if (!restaurant || !restaurant.is_active || restaurant.is_blocked) {
+      res.status(404).json({ success: false, status: "ERROR", message: "Restaurant not found", data: null });
+      return;
+    }
+
+    const [rows, summary] = await Promise.all([
+      Rating.list(restaurantId, { limit, offset }),
+      Rating.getSummary(restaurantId),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Ratings retrieved",
+      data: {
+        summary,
+        ratings: rows.map(Rating.toResponse),
+        pagination: {
+          page,
+          limit,
+          total: summary.total,
+          totalPages: Math.ceil(summary.total / limit),
+        },
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to fetch ratings",
+      data: null,
+    });
+  }
+}
+
+export async function adminDeleteRating(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const { ratingId } = req.params as { ratingId: string };
+    const updated = await Rating.setVisibility(ratingId, false);
+    if (!updated) {
+      res.status(404).json({ success: false, status: "ERROR", message: "Rating not found", data: null });
+      return;
+    }
+    res.status(200).json({ success: true, status: "OK", message: "Rating hidden", data: { rating_id: ratingId } });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to hide rating",
+      data: null,
+    });
+  }
+}
