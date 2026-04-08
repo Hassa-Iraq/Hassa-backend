@@ -72,6 +72,38 @@ export async function authenticate(
   }
 }
 
+export async function optionalAuthenticate(
+  req: AuthRequest,
+  _res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      next();
+      return;
+    }
+    const token = authHeader.substring(7);
+    const authServiceUrl = config.AUTH_SERVICE_URL || "http://auth-service:3001";
+    const response = await fetch(`${authServiceUrl}/auth/me`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (response.ok) {
+      const data = (await response.json()) as {
+        success?: boolean;
+        data?: { user?: { id: string; role?: string; email?: string } };
+      };
+      const user = data?.data?.user;
+      if (data.success && user?.id) {
+        req.user = { id: user.id, role: user.role ?? "customer", email: user.email ?? "" };
+      }
+    }
+  } catch {
+  }
+  next();
+}
+
 export function authorize(...allowedRoles: string[]) {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {

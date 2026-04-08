@@ -46,7 +46,16 @@ function getDistanceSql(alias: string): string {
   `;
 }
 
-export async function listRestaurants(req: Request, res: Response): Promise<void> {
+async function getFavoriteSet(userId: string | undefined): Promise<Set<string>> {
+  if (!userId) return new Set();
+  const r = await pool.query(
+    `SELECT restaurant_id FROM restaurant.customer_favorite_restaurants WHERE user_id = $1`,
+    [userId]
+  );
+  return new Set(r.rows.map((row: { restaurant_id: string }) => row.restaurant_id));
+}
+
+export async function listRestaurants(req: AuthRequest, res: Response): Promise<void> {
   try {
     const page = Math.max(1, parseInt(String(req.query.page)) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit)) || 20));
@@ -56,25 +65,17 @@ export async function listRestaurants(req: Request, res: Response): Promise<void
     const lng = parseCoordinate(req.query.lng ?? req.query.longitude);
     const cuisine = typeof req.query.cuisine === "string" ? req.query.cuisine.trim() : undefined;
     const hasLocation = lat != null && lng != null;
+    const userId = req.user?.id;
 
     let data: Record<string, unknown>;
     if (!hasLocation) {
-      const cacheKey = cuisine ? null : cacheKeys.restaurantList(page, limit);
-      if (cacheKey) {
-        const cached = await cache.get<{ restaurants: unknown[]; pagination: unknown }>(cacheKey);
-        if (cached) {
-          res.status(200).json({ success: true, status: "OK", message: "Restaurants listed", data: cached });
-          return;
-        }
-      }
-
       const rows = await Restaurant.listPublic({ limit, offset, cuisine });
       const total = await Restaurant.countPublic({ cuisine });
+      const favSet = await getFavoriteSet(userId);
       data = {
-        restaurants: rows.map(Restaurant.toResponse),
+        restaurants: rows.map((row) => ({ ...Restaurant.toResponse(row), is_favorite: favSet.has(row.id) })),
         pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
       };
-      if (cacheKey) await cache.set(cacheKey, data, 300);
     } else {
       const distanceSql = getDistanceSql("r");
       const cuisineCondition = cuisine ? `AND r.cuisine ILIKE $5` : "";
@@ -107,10 +108,12 @@ export async function listRestaurants(req: Request, res: Response): Promise<void
         cuisine ? [cuisine] : []
       );
       const total = countResult.rows[0]?.total ?? 0;
+      const favSet = await getFavoriteSet(userId);
       data = {
         restaurants: rowsResult.rows.map((row) => ({
           ...Restaurant.toResponse(row),
           distance_km: row.distance_km != null ? parseFloat(String(row.distance_km)) : null,
+          is_favorite: favSet.has(row.id as string),
         })),
         pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
       };
@@ -132,57 +135,47 @@ export async function listRestaurants(req: Request, res: Response): Promise<void
   }
 }
 
-export async function getRestaurantPublic(req: Request, res: Response): Promise<void> {
+export async function getRestaurantPublic(req: AuthRequest, res: Response): Promise<void> {
   try {
     const id = req.params.id as string;
+    const userId = req.user?.id;
     const cacheKey = cacheKeys.restaurant(id);
-    const cached = await cache.get<{ restaurant: unknown }>(cacheKey);
-    if (cached) {
-      res.status(200).json({
-        success: true,
-        status: "OK",
-        message: "Restaurant retrieved",
-        data: cached,
-      });
-      return;
+
+    let restaurantData: { restaurant: Record<string, unknown> } | null =
+      await cache.get<{ restaurant: Record<string, unknown> }>(cacheKey);
+
+    if (!restaurantData) {
+      const row = await Restaurant.findById(id);
+      if (!row) {
+        res.status(404).json({ success: false, status: "ERROR", message: "Restaurant not found or not available", data: null });
+        return;
+      }
+      if (row.parent_id !== null || !row.is_active || row.is_blocked || !row.is_open) {
+        res.status(404).json({ success: false, status: "ERROR", message: "Restaurant not found or not available", data: null });
+        return;
+      }
+      const branchCountResult = await pool.query<{ total: number }>(
+        `SELECT COUNT(*)::int AS total FROM restaurant.restaurants WHERE parent_id = $1`,
+        [id]
+      );
+      restaurantData = {
+        restaurant: { ...Restaurant.toResponse(row), branches_count: branchCountResult.rows[0]?.total ?? 0 },
+      };
+      await cache.set(cacheKey, restaurantData, 300);
     }
-    const row = await Restaurant.findById(id);
-    if (!row) {
-      res.status(404).json({
-        success: false,
-        status: "ERROR",
-        message: "Restaurant not found or not available",
-        data: null,
-      });
-      return;
-    }
-    if (row.parent_id !== null || !row.is_active || row.is_blocked || !row.is_open) {
-      res.status(404).json({
-        success: false,
-        status: "ERROR",
-        message: "Restaurant not found or not available",
-        data: null,
-      });
-      return;
-    }
-    const branchCountResult = await pool.query<{ total: number }>(
-      `SELECT COUNT(*)::int AS total
-       FROM restaurant.restaurants
-       WHERE parent_id = $1`,
-      [id]
-    );
-    const data = {
-      restaurant: {
-        ...Restaurant.toResponse(row),
-        branches_count: branchCountResult.rows[0]?.total ?? 0,
-      },
-    };
-    await cache.set(cacheKey, data, 300);
+
+    const isFavorite = userId
+      ? (await pool.query(
+          `SELECT 1 FROM restaurant.customer_favorite_restaurants WHERE user_id = $1 AND restaurant_id = $2`,
+          [userId, id]
+        )).rowCount! > 0
+      : false;
+
     res.status(200).json({
       success: true,
       status: "OK",
       message: "Restaurant retrieved",
-      data,
+      data: { restaurant: { ...restaurantData.restaurant, is_favorite: isFavorite } },
     });
   } catch (err) {
     res.status(500).json({
@@ -194,7 +187,7 @@ export async function getRestaurantPublic(req: Request, res: Response): Promise<
   }
 }
 
-export async function getHomeData(req: Request, res: Response): Promise<void> {
+export async function getHomeData(req: AuthRequest, res: Response): Promise<void> {
   try {
     const lat = parseCoordinate(req.query.lat ?? req.query.latitude);
     const lng = parseCoordinate(req.query.lng ?? req.query.longitude);
@@ -218,7 +211,10 @@ export async function getHomeData(req: Request, res: Response): Promise<void> {
     const cuisineCategoriesRows = await CuisineCategory.listPublic();
     const topRestaurantsRows = await Restaurant.getTopNearby({ lat, lng, limit: topLimit });
     const topRestaurantIds = topRestaurantsRows.map((r) => r.id);
-    const recommendedDishesRows = await MenuItem.getRecommendedDishes(topRestaurantIds, dishesLimit);
+    const [recommendedDishesRows, favSet] = await Promise.all([
+      MenuItem.getRecommendedDishes(topRestaurantIds, dishesLimit),
+      getFavoriteSet(req.user?.id),
+    ]);
 
     const distanceSql = getDistanceSql("r");
     const recommendedResult = await pool.query(
@@ -284,6 +280,7 @@ export async function getHomeData(req: Request, res: Response): Promise<void> {
           rating: row.rating != null ? parseFloat(String(row.rating)) : 0,
           recommendation_score:
             row.recommendation_score != null ? parseFloat(String(row.recommendation_score)) : 0,
+          is_favorite: favSet.has(row.id as string),
         })),
         top_restaurants: topRestaurantsRows.map((row) => ({
           ...Restaurant.toResponse(row),
@@ -291,6 +288,7 @@ export async function getHomeData(req: Request, res: Response): Promise<void> {
           cover_image_url: normalizeImageUrl(row.cover_image_url),
           distance_km: parseFloat(String(row.distance_km)),
           rating: parseFloat(String(row.rating)),
+          is_favorite: favSet.has(row.id as string),
         })),
         recommended_dishes: recommendedDishesRows.map((row) => ({
           id: row.id,
@@ -505,17 +503,24 @@ export async function listFavoriteRestaurants(req: AuthRequest, res: Response): 
   }
 }
 
-export async function getRestaurantWithMenu(req: Request, res: Response): Promise<void> {
+export async function getRestaurantWithMenu(req: AuthRequest, res: Response): Promise<void> {
   try {
     const id = req.params.id as string;
+    const userId = req.user?.id;
     const cacheKey = `restaurant:${id}:details`;
-    const cached = await cache.get<unknown>(cacheKey);
+    const cached = await cache.get<{ restaurant: Record<string, unknown>; menu: unknown }>(cacheKey);
     if (cached) {
+      const isFavorite = userId
+        ? (await pool.query(
+            `SELECT 1 FROM restaurant.customer_favorite_restaurants WHERE user_id = $1 AND restaurant_id = $2`,
+            [userId, id]
+          )).rowCount! > 0
+        : false;
       res.status(200).json({
         success: true,
         status: "OK",
         message: "Restaurant with menu retrieved",
-        data: cached,
+        data: { ...cached, restaurant: { ...cached.restaurant, is_favorite: isFavorite } },
       });
       return;
     }
@@ -580,7 +585,14 @@ export async function getRestaurantWithMenu(req: Request, res: Response): Promis
       option_groups: (optionGroupsByItem.get(item.id as string) ?? []).map(MenuItemOption.groupToResponse),
     });
 
-    const data = {
+    const isFavorite = userId
+      ? (await pool.query(
+          `SELECT 1 FROM restaurant.customer_favorite_restaurants WHERE user_id = $1 AND restaurant_id = $2`,
+          [userId, id]
+        )).rowCount! > 0
+      : false;
+
+    const cacheableData = {
       restaurant: {
         ...Restaurant.toResponse(restaurantRow),
         branches_count: branchCountResult.rows[0]?.total ?? 0,
@@ -593,7 +605,9 @@ export async function getRestaurantWithMenu(req: Request, res: Response): Promis
         uncategorized_items: (uncategorizedResult.rows as Array<Record<string, unknown>>).map(attachOptions),
       },
     };
-    await cache.set(cacheKey, data, 300);
+    await cache.set(cacheKey, cacheableData, 300);
+
+    const data = { ...cacheableData, restaurant: { ...cacheableData.restaurant, is_favorite: isFavorite } };
     res.status(200).json({
       success: true,
       status: "OK",
