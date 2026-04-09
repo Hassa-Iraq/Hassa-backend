@@ -934,7 +934,10 @@ export async function getMenuItemDetails(req: Request, res: Response): Promise<v
       return;
     }
 
-    const optionGroups = await MenuItemOption.listGroupsByItemId(id);
+    const [optionGroups, restaurant] = await Promise.all([
+      MenuItemOption.listGroupsByItemId(id),
+      Restaurant.findById(item.restaurant_id),
+    ]);
 
     res.status(200).json({
       success: true,
@@ -944,11 +947,13 @@ export async function getMenuItemDetails(req: Request, res: Response): Promise<v
         item: {
           id: item.id,
           restaurant_id: item.restaurant_id,
+          restaurant_name: restaurant?.name ?? null,
+          restaurant_logo_url: restaurant?.logo_url ? normalizeImageUrl(restaurant.logo_url) : null,
           category_id: item.category_id,
           name: item.name,
           description: item.description,
           price: parseFloat(item.price),
-          image_url: item.image_url,
+          image_url: normalizeImageUrl(item.image_url),
           nutrition: item.nutrition,
           search_tags: item.search_tags,
           is_available: item.is_available,
