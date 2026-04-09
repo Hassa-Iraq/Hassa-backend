@@ -628,6 +628,7 @@ export async function getRestaurantWithMenu(req: AuthRequest, res: Response): Pr
 
     const attachOptions = (item: Record<string, unknown>) => ({
       ...item,
+      image_url: normalizeImageUrl(item.image_url),
       option_groups: (optionGroupsByItem.get(item.id as string) ?? []).map(MenuItemOption.groupToResponse),
     });
 
@@ -646,8 +647,9 @@ export async function getRestaurantWithMenu(req: AuthRequest, res: Response): Pr
         branches_count: branchCountResult.rows[0]?.total ?? 0,
       },
       menu: {
-        categories: categoriesResult.rows.map((r: { items?: Array<Record<string, unknown>> }) => ({
+        categories: categoriesResult.rows.map((r: { image_url?: unknown; items?: Array<Record<string, unknown>> }) => ({
           ...r,
+          image_url: normalizeImageUrl(r.image_url),
           items: (r.items ?? []).map(attachOptions),
         })),
         uncategorized_items: (uncategorizedResult.rows as Array<Record<string, unknown>>).map(attachOptions),
@@ -739,13 +741,15 @@ export async function getRestaurantMenu(req: Request, res: Response): Promise<vo
 
     const attachOptions = (item: Record<string, unknown>) => ({
       ...item,
+      image_url: normalizeImageUrl(item.image_url),
       option_groups: (optionGroupsByItem.get(item.id as string) ?? []).map(MenuItemOption.groupToResponse),
     });
 
     const data = {
       restaurant: { id: restaurantResult.rows[0].id, name: restaurantResult.rows[0].name },
-      categories: categoriesResult.rows.map((r: { items?: Array<Record<string, unknown>> }) => ({
+      categories: categoriesResult.rows.map((r: { image_url?: unknown; items?: Array<Record<string, unknown>> }) => ({
         ...r,
+        image_url: normalizeImageUrl(r.image_url),
         items: (r.items ?? []).map(attachOptions),
       })),
       uncategorizedItems: (uncategorizedResult.rows as Array<Record<string, unknown>>).map(attachOptions),
