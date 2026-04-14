@@ -12,7 +12,8 @@
       "Read(//^    \\\\{\\\\s*$/{getline; if \\(/^      \"\"\"\"\"\"\"\"name\"\"\"\"\"\"\"\":/**)",
       "Bash(python3 -c \":*)",
       "Bash(python3:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(node -e ':*)"
     ]
   }
 }
