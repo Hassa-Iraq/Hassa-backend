@@ -2,6 +2,7 @@ import express, { Express } from "express";
 import cors from "cors";
 import healthRoutes from "./routes/health";
 import orderRoutes from "./routes/orders";
+import internalRoutes from "./routes/internal";
 
 const app: Express = express();
 
@@ -25,6 +26,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/", healthRoutes);
+app.use("/", internalRoutes);
 app.use("/", orderRoutes);
 
 export default app;

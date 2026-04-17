@@ -120,6 +120,7 @@ services:
       REDIS_PORT: 6379
       AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:3001}
       ELASTICSEARCH_URL: ${ELASTICSEARCH_URL:-http://elasticsearch:9200}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SERVICE_NAME: restaurant-service
     ports:
@@ -162,6 +163,10 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:3001}
+      RESTAURANT_SERVICE_URL: ${RESTAURANT_SERVICE_URL:-http://restaurant-service:3002}
+      DELIVERY_SERVICE_URL: ${DELIVERY_SERVICE_URL:-http://delivery-service:3004}
+      WALLET_SERVICE_URL: ${WALLET_SERVICE_URL:-http://wallet-service:3009}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SERVICE_NAME: order-service
     ports:
@@ -172,6 +177,8 @@ services:
       redis:
         condition: service_healthy
       auth-service:
+        condition: service_healthy
+      wallet-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3003/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1));\""]
@@ -200,6 +207,11 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:3001}
+      ORDER_SERVICE_URL: ${ORDER_SERVICE_URL:-http://order-service:3003}
+      RESTAURANT_SERVICE_URL: ${RESTAURANT_SERVICE_URL:-http://restaurant-service:3002}
+      WALLET_SERVICE_URL: ${WALLET_SERVICE_URL:-http://wallet-service:3009}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
+      PLATFORM_COMMISSION_RATE: ${PLATFORM_COMMISSION_RATE:-0.15}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SERVICE_NAME: delivery-service
     ports:
@@ -210,6 +222,8 @@ services:
       redis:
         condition: service_healthy
       auth-service:
+        condition: service_healthy
+      wallet-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3004/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1));\""]
@@ -341,6 +355,46 @@ services:
       - food-app-network
     restart: unless-stopped
 
+  # Wallet Service
+  wallet-service:
+    build:
+      context: .
+      dockerfile: ./services/wallet-service/Dockerfile
+    container_name: food-app-wallet-service
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${WALLET_SERVICE_PORT:-3009}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-hassa}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth-service:3001}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
+      PLATFORM_COMMISSION_RATE: ${PLATFORM_COMMISSION_RATE:-0.15}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SERVICE_NAME: wallet-service
+    ports:
+      - "${WALLET_SERVICE_PORT:-3009}:3009"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3009/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1));\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    networks:
+      - food-app-network
+    restart: unless-stopped
+
   # Nginx API Gateway
   nginx:
     image: nginx:1.24-alpine
@@ -364,6 +418,8 @@ services:
       notification-service:
         condition: service_healthy
       admin-analytics-service:
+        condition: service_healthy
+      wallet-service:
         condition: service_healthy
     networks:
       - food-app-network

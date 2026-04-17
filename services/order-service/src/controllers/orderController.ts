@@ -132,6 +132,64 @@ async function fetchRestaurantMenu(restaurantId: string): Promise<Map<string, Me
   return map;
 }
 
+async function walletDebit(params: {
+  userId: string;
+  amount: number;
+  referenceType: string;
+  referenceId: string;
+  note: string;
+}): Promise<void> {
+  const walletUrl = config.WALLET_SERVICE_URL || "http://wallet-service:3009";
+  const internalToken = config.INTERNAL_SERVICE_TOKEN;
+  if (!internalToken) return;
+
+  const response = await fetch(`${walletUrl}/internal/debit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Internal-Token": internalToken },
+    body: JSON.stringify({
+      user_id: params.userId,
+      amount: params.amount,
+      type: "order_payment",
+      reference_type: params.referenceType,
+      reference_id: params.referenceId,
+      note: params.note,
+    }),
+  });
+
+  if (!response.ok) {
+    const json = (await response.json().catch(() => ({}))) as { message?: string; data?: { balance?: number; required?: number } };
+    if (response.status === 402) {
+      throw new Error(json.message || "Insufficient wallet balance");
+    }
+    throw new Error(json.message || "Wallet payment failed");
+  }
+}
+
+async function walletRefund(params: {
+  userId: string;
+  amount: number;
+  referenceType: string;
+  referenceId: string;
+  note: string;
+}): Promise<void> {
+  const walletUrl = config.WALLET_SERVICE_URL || "http://wallet-service:3009";
+  const internalToken = config.INTERNAL_SERVICE_TOKEN;
+  if (!internalToken) return;
+
+  await fetch(`${walletUrl}/internal/credit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Internal-Token": internalToken },
+    body: JSON.stringify({
+      user_id: params.userId,
+      amount: params.amount,
+      type: "order_refund",
+      reference_type: params.referenceType,
+      reference_id: params.referenceId,
+      note: params.note,
+    }),
+  }).catch(() => { });
+}
+
 async function getOwnedRestaurantIds(authHeader: string): Promise<string[]> {
   const restaurantServiceUrl = config.RESTAURANT_SERVICE_URL || "http://restaurant-service:3002";
   const response = await fetch(`${restaurantServiceUrl}/?page=1&limit=200`, {
@@ -373,19 +431,39 @@ export async function createOrder(req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const created = await Order.create({
-      user_id: req.user!.id,
-      restaurant_id: restaurantId,
-      subtotal: Number(subtotal.toFixed(2)),
-      delivery_fee: deliveryFee,
-      tax_amount: taxAmount,
-      discount_amount: discountAmount,
-      total_amount: totalAmount,
-      currency: typeof body.currency === "string" && body.currency.trim() ? body.currency.trim() : "PKR",
-      notes: typeof body.notes === "string" ? body.notes : null,
-      delivery_address_id: trimmedAddressId,
-      items,
+    await walletDebit({
+      userId: req.user!.id,
+      amount: totalAmount,
+      referenceType: "order_pending",
+      referenceId: req.user!.id,
+      note: `Payment for order at restaurant ${restaurantId}`,
     });
+
+    let created: Order.OrderWithItems;
+    try {
+      created = await Order.create({
+        user_id: req.user!.id,
+        restaurant_id: restaurantId,
+        subtotal: Number(subtotal.toFixed(2)),
+        delivery_fee: deliveryFee,
+        tax_amount: taxAmount,
+        discount_amount: discountAmount,
+        total_amount: totalAmount,
+        currency: typeof body.currency === "string" && body.currency.trim() ? body.currency.trim() : "PKR",
+        notes: typeof body.notes === "string" ? body.notes : null,
+        delivery_address_id: trimmedAddressId,
+        items,
+      });
+    } catch (orderErr) {
+      await walletRefund({
+        userId: req.user!.id,
+        amount: totalAmount,
+        referenceType: "order_creation_failed",
+        referenceId: req.user!.id,
+        note: "Refund: order creation failed",
+      });
+      throw orderErr;
+    }
 
     const displayAddress = await DeliveryAddress.deliveryAddressForOrderResponse(created.order);
     const orderForResponse = {
@@ -763,6 +841,16 @@ export async function updateOrderStatus(req: AuthRequest, res: Response): Promis
           body: JSON.stringify({ order_id: updated.id }),
         }).catch(() => { });
       }
+    }
+
+    if (nextStatus === "cancelled") {
+      walletRefund({
+        userId: order.user_id,
+        amount: parseFloat(order.total_amount),
+        referenceType: "order",
+        referenceId: order.id,
+        note: `Refund for cancelled order #${order.order_number}`,
+      }).catch(() => { });
     }
 
     res.status(200).json({

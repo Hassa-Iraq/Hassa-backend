@@ -11,7 +11,12 @@
       "Bash(wc -l /Users/ahsen/Downloads/food-app-main/database/migrations/*.sql)",
       "Read(//^    \\\\{\\\\s*$/{getline; if \\(/^      \"\"\"\"\"\"\"\"name\"\"\"\"\"\"\"\":/**)",
       "Bash(python3 -c \":*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(git ls-tree *)",
+      "Bash(awk '{print $4}')"
+    ],
+    "additionalDirectories": [
+      "/Users/ahsen/Downloads/food-app-main/database/migrations"
     ]
   }
 }
