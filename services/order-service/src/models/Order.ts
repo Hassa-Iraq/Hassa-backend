@@ -21,8 +21,6 @@ export interface OrderRow {
   discount_amount: string;
   total_amount: string;
   currency: string;
-  order_type: string;
-  payment_type: string;
   notes: string | null;
   delivery_address_id: string | null;
   delivery_address?: Record<string, unknown> | null;
@@ -134,10 +132,8 @@ export interface CreateOrderInput {
   discount_amount: number;
   total_amount: number;
   currency?: string;
-  order_type?: string;
-  payment_type?: string;
   notes?: string | null;
-  delivery_address_id: string | null;
+  delivery_address_id: string;
   items: CreateOrderItemInput[];
 }
 
@@ -267,8 +263,8 @@ export async function create(input: CreateOrderInput): Promise<OrderWithItems> {
     const orderResult = await client.query(
       `INSERT INTO orders.orders (
          order_number, user_id, restaurant_id, status, subtotal, delivery_fee, tax_amount, discount_amount, total_amount,
-         currency, order_type, payment_type, notes, delivery_address_id, placed_at
-       ) VALUES ($1, $2, $3, 'pending', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+         currency, notes, delivery_address_id, placed_at
+       ) VALUES ($1, $2, $3, 'pending', $4, $5, $6, $7, $8, $9, $10, $11, NOW())
        RETURNING *`,
       [
         orderNumber,
@@ -280,8 +276,6 @@ export async function create(input: CreateOrderInput): Promise<OrderWithItems> {
         input.discount_amount,
         input.total_amount,
         input.currency ?? "PKR",
-        input.order_type ?? "delivery",
-        input.payment_type ?? "cash",
         input.notes ?? null,
         input.delivery_address_id,
       ]
@@ -500,8 +494,6 @@ export async function findDetailsById(id: string): Promise<OrderDetailsRecord | 
     discount_amount: row.discount_amount,
     total_amount: row.total_amount,
     currency: row.currency,
-    order_type: row.order_type ?? "delivery",
-    payment_type: row.payment_type ?? "cash",
     notes: row.notes,
     delivery_address_id: row.delivery_address_id != null ? String(row.delivery_address_id) : null,
     placed_at: row.placed_at,
