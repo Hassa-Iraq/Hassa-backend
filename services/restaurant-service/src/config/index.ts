@@ -5,6 +5,7 @@ const schema = {
   ...commonSchemas.database,
   ...commonSchemas.redis,
   AUTH_SERVICE_URL: { type: 'string' as const, default: 'http://auth-service:3001' },
+  INTERNAL_SERVICE_TOKEN: { type: 'string' as const, required: false },
   ELASTICSEARCH_URL: { type: 'string' as const, default: 'http://localhost:9200' },
   ELASTICSEARCH_USERNAME: { type: 'string' as const, required: false },
   ELASTICSEARCH_PASSWORD: { type: 'string' as const, required: false },

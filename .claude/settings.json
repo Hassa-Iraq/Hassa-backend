@@ -12,8 +12,13 @@
       "Read(//^    \\\\{\\\\s*$/{getline; if \\(/^      \"\"\"\"\"\"\"\"name\"\"\"\"\"\"\"\":/**)",
       "Bash(python3 -c \":*)",
       "Bash(python3:*)",
+      "Bash(git ls-tree *)",
+      "Bash(awk '{print $4}')",
       "Bash(npm run:*)",
       "Bash(node -e ':*)"
+    ],
+    "additionalDirectories": [
+      "/Users/ahsen/Downloads/food-app-main/database/migrations"
     ]
   }
 }

@@ -41,6 +41,24 @@ type OrderPayload = {
   notes?: string | null;
 };
 
+type OrderDetailsPayload = OrderPayload & {
+  subtotal: number;
+  delivery_fee: number;
+  discount_amount: number;
+  tax_amount: number;
+  total_amount: number;
+};
+
+type RestaurantApiResponse = {
+  success?: boolean;
+  data?: {
+    restaurant?: {
+      id: string;
+      user_id: string;
+    };
+  };
+};
+
 function deliveryAddressLineFromOrder(da: Record<string, unknown> | null | undefined): string | null {
   if (!da) return null;
   const line = da.complete_address;
@@ -96,6 +114,85 @@ async function getOrderById(orderId: string, authHeader: string): Promise<OrderP
     throw new Error(json.message || "Order not found");
   }
   return json.data.order;
+}
+
+async function getOrderDetails(orderId: string): Promise<OrderDetailsPayload> {
+  const orderServiceUrl = config.ORDER_SERVICE_URL || "http://order-service:3003";
+  const response = await fetch(`${orderServiceUrl}/internal/orders/${orderId}`, {
+    method: "GET",
+    headers: internalAuthHeaders(),
+  });
+  const json = (await response.json().catch(() => ({}))) as { success?: boolean; data?: { order?: OrderDetailsPayload } };
+  if (!response.ok || !json.success || !json.data?.order) {
+    throw new Error("Failed to fetch order details for earnings");
+  }
+  return json.data.order;
+}
+
+async function getRestaurantOwnerId(restaurantId: string): Promise<string> {
+  const restaurantServiceUrl = config.RESTAURANT_SERVICE_URL || "http://restaurant-service:3002";
+  const response = await fetch(`${restaurantServiceUrl}/internal/restaurants/${restaurantId}`, {
+    method: "GET",
+    headers: internalAuthHeaders(),
+  });
+  const json = (await response.json().catch(() => ({}))) as RestaurantApiResponse;
+  if (!response.ok || !json.success || !json.data?.restaurant?.user_id) {
+    throw new Error("Failed to fetch restaurant owner for earnings");
+  }
+  return json.data.restaurant.user_id;
+}
+
+async function creditWallet(userId: string, amount: number, type: string, referenceId: string, referenceType: string, description: string): Promise<void> {
+  const walletServiceUrl = config.WALLET_SERVICE_URL || "http://wallet-service:3009";
+  await fetch(`${walletServiceUrl}/internal/credit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...internalAuthHeaders() },
+    body: JSON.stringify({ user_id: userId, amount, type, reference_id: referenceId, reference_type: referenceType, description }),
+  });
+}
+
+async function settleDeliveryEarnings(delivery: Delivery.DeliveryRow): Promise<void> {
+  try {
+    const [order, restaurantOwnerId] = await Promise.all([
+      getOrderDetails(delivery.order_id),
+      getRestaurantOwnerId(delivery.restaurant_id),
+    ]);
+
+    const commissionRate = config.PLATFORM_COMMISSION_RATE ?? 0.15;
+    const restaurantEarning = Number(
+      ((order.subtotal + order.tax_amount - order.discount_amount) * (1 - commissionRate)).toFixed(2)
+    );
+    const driverEarning = Number(order.delivery_fee.toFixed(2));
+
+    const creditPromises: Promise<void>[] = [
+      creditWallet(
+        restaurantOwnerId,
+        restaurantEarning,
+        "order_earning",
+        delivery.order_id,
+        "delivery",
+        `Earnings for order ${delivery.order_id}`
+      ),
+    ];
+
+    if (delivery.driver_user_id) {
+      creditPromises.push(
+        creditWallet(
+          delivery.driver_user_id,
+          driverEarning,
+          "delivery_earning",
+          delivery.id,
+          "delivery",
+          `Delivery fee for delivery ${delivery.id}`
+        )
+      );
+    }
+
+    await Promise.all(creditPromises);
+  } catch (err) {
+    // Fire-and-forget: log but don't fail the status update
+    console.error("[settleDeliveryEarnings] Failed to settle earnings:", err instanceof Error ? err.message : err);
+  }
 }
 
 async function getDriverById(driverId: string, authHeader: string): Promise<{
@@ -682,6 +779,10 @@ export async function updateDeliveryStatus(req: AuthRequest, res: Response): Pro
           driver_user_id: updated.driver_user_id,
           is_available: true,
         });
+      }
+
+      if (nextStatus === "delivered") {
+        void settleDeliveryEarnings(updated);
       }
     }
 
