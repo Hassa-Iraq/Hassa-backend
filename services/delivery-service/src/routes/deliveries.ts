@@ -15,5 +15,6 @@ router.get("/drivers/availability", authenticate, authorize("admin"), deliveryCo
 router.get("/", authenticate, authorize("admin", "driver", "restaurant", "customer"), deliveryController.listDeliveries);
 router.get("/:id", authenticate, authorize("admin", "driver", "restaurant", "customer"), deliveryController.getDeliveryById);
 router.patch("/:id/status", authenticate, authorize("admin", "driver"), deliveryController.updateDeliveryStatus);
+router.post("/:id/location", authenticate, authorize("driver"), deliveryController.updateDriverLocation);
 
 export default router;

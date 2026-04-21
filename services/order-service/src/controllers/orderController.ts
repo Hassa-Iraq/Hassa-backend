@@ -3,6 +3,7 @@ import config from "../config/index";
 import * as Order from "../models/Order";
 import { AuthRequest } from "../middleware/auth";
 import * as DeliveryAddress from "../utils/deliveryAddress";
+import { publish } from "../utils/redisPublisher";
 
 interface IncomingOrderItem {
   menu_item_id?: string;
@@ -483,6 +484,14 @@ export async function createOrder(req: AuthRequest, res: Response): Promise<void
       throw orderErr;
     }
 
+    publish("order:placed", {
+      order_id: created.order.id,
+      order_number: created.order.order_number,
+      restaurant_id: created.order.restaurant_id,
+      customer_id: created.order.user_id,
+      total_amount: parseFloat(created.order.total_amount),
+    });
+
     const displayAddress = await DeliveryAddress.deliveryAddressForOrderResponse(created.order);
     const orderForResponse = {
       ...created.order,
@@ -860,6 +869,13 @@ export async function updateOrderStatus(req: AuthRequest, res: Response): Promis
         }).catch(() => { });
       }
     }
+
+    publish("order:status_changed", {
+      order_id: updated.id,
+      order_number: updated.order_number,
+      customer_id: updated.user_id,
+      status: nextStatus,
+    });
 
     if (nextStatus === "cancelled" && order.payment_type === "wallet") {
       walletRefund({
