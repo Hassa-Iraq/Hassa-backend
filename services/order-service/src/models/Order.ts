@@ -132,8 +132,10 @@ export interface CreateOrderInput {
   discount_amount: number;
   total_amount: number;
   currency?: string;
+  order_type?: string;
+  payment_type?: string;
   notes?: string | null;
-  delivery_address_id: string;
+  delivery_address_id: string | null;
   items: CreateOrderItemInput[];
 }
 
