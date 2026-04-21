@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import * as Wallet from "../models/Wallet";
+import { publish } from "../utils/redisPublisher";
 
 export async function ensureWallet(req: Request, res: Response): Promise<void> {
   try {
@@ -80,6 +81,14 @@ export async function creditWallet(req: Request, res: Response): Promise<void> {
 
     await Wallet.ensureWallet(userId);
     const tx = await Wallet.credit({ userId, amount: Number(amount.toFixed(2)), type, referenceType, referenceId, note });
+
+    publish("wallet:credited", {
+      user_id: userId,
+      amount: Number(amount.toFixed(2)),
+      new_balance: parseFloat(tx.balance_after),
+      note: note ?? "",
+    });
+
     res.status(200).json({
       success: true, status: "OK", message: "Wallet credited",
       data: { transaction: Wallet.transactionToResponse(tx) },

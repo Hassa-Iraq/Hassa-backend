@@ -2,6 +2,7 @@ import { Response } from "express";
 import config from "../config/index";
 import * as Delivery from "../models/Delivery";
 import { AuthRequest } from "../middleware/auth";
+import { publish } from "../utils/redisPublisher";
 
 const ALLOWED_NEXT_STATUSES: Record<Delivery.DeliveryStatus, Delivery.DeliveryStatus[]> = {
   pending_assignment: ["assigned", "cancelled"],
@@ -786,6 +787,27 @@ export async function updateDeliveryStatus(req: AuthRequest, res: Response): Pro
       }
     }
 
+    // Notify customer: driver accepted order
+    if (nextStatus === "accepted_by_driver") {
+      publish("delivery:driver_assigned", {
+        order_id: updated.order_id,
+        delivery_id: updated.id,
+        customer_id: updated.customer_user_id,
+        driver_user_id: updated.driver_user_id,
+      });
+    }
+
+    if (["picked_up", "delivered", "cancelled", "failed"].includes(nextStatus)) {
+      publish("delivery:status_changed", {
+        delivery_id: updated.id,
+        order_id: updated.order_id,
+        customer_id: updated.customer_user_id,
+        restaurant_id: updated.restaurant_id,
+        driver_id: updated.driver_user_id,
+        status: nextStatus,
+      });
+    }
+
     res.status(200).json({
       success: true,
       status: "OK",
@@ -881,6 +903,55 @@ export async function listDriverAvailability(req: AuthRequest, res: Response): P
       success: false,
       status: "ERROR",
       message: err instanceof Error ? err.message : "Failed to list driver availability",
+      data: null,
+    });
+  }
+}
+
+export async function updateDriverLocation(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const deliveryId = req.params.id as string;
+    const { latitude, longitude, bearing } = req.body as {
+      latitude?: unknown;
+      longitude?: unknown;
+      bearing?: unknown;
+    };
+
+    const lat = typeof latitude === "number" ? latitude : parseFloat(String(latitude));
+    const lng = typeof longitude === "number" ? longitude : parseFloat(String(longitude));
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      res.status(400).json({ success: false, status: "ERROR", message: "Valid latitude and longitude are required", data: null });
+      return;
+    }
+
+    const delivery = await Delivery.findById(deliveryId);
+    if (!delivery || delivery.driver_user_id !== req.user?.id) {
+      res.status(403).json({ success: false, status: "ERROR", message: "Delivery not found or not assigned to you", data: null });
+      return;
+    }
+
+    // Update driver's current position
+    await Delivery.upsertDriverAvailability({
+      driver_user_id: req.user.id,
+      current_latitude: lat,
+      current_longitude: lng,
+    });
+
+    publish("delivery:location_updated", {
+      delivery_id: deliveryId,
+      customer_id: delivery.customer_user_id,
+      latitude: lat,
+      longitude: lng,
+      bearing: typeof bearing === "number" ? bearing : null,
+    });
+
+    res.status(200).json({ success: true, status: "OK", message: "Location updated", data: null });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to update location",
       data: null,
     });
   }
