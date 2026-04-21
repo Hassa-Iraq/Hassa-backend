@@ -1917,6 +1917,7 @@ export const addDriver = async (req: AuthRequest, res: Response) => {
           typeof driving_license_image_url === "string" ? trim(driving_license_image_url) || null : null,
         additional_data: additional_data ?? {},
         is_active: is_active !== undefined ? Boolean(is_active) : true,
+        approval_status: "approved",
         created_by_user_id: req.user?.id ?? null,
       });
       if (image_url !== undefined) {
@@ -1976,6 +1977,10 @@ export const listDrivers = async (req: AuthRequest, res: Response) => {
       typeof req.query.is_active === "string"
         ? req.query.is_active.toLowerCase() === "true"
         : undefined;
+    const approvalStatus =
+      typeof req.query.approval_status === "string" && ["pending", "approved", "rejected"].includes(req.query.approval_status)
+        ? req.query.approval_status
+        : undefined;
 
     if (req.user?.role === "restaurant" && req.user.id) {
       const ownedRestaurantIds = await getOwnedRestaurantIds(req.user.id);
@@ -1995,6 +2000,7 @@ export const listDrivers = async (req: AuthRequest, res: Response) => {
         owner_type: "restaurant",
         owner_restaurant_ids: ownedRestaurantIds,
         is_active: isActive,
+        approval_status: approvalStatus,
         limit,
         offset,
       });
@@ -2003,6 +2009,7 @@ export const listDrivers = async (req: AuthRequest, res: Response) => {
         owner_type: "restaurant",
         owner_restaurant_ids: ownedRestaurantIds,
         is_active: isActive,
+        approval_status: approvalStatus,
       });
       return res.status(200).json({
         success: true,
@@ -2020,6 +2027,7 @@ export const listDrivers = async (req: AuthRequest, res: Response) => {
       owner_type: ownerType,
       owner_restaurant_id: ownerRestaurantId,
       is_active: isActive,
+      approval_status: approvalStatus,
       limit,
       offset,
     });
@@ -2028,6 +2036,7 @@ export const listDrivers = async (req: AuthRequest, res: Response) => {
       owner_type: ownerType,
       owner_restaurant_id: ownerRestaurantId,
       is_active: isActive,
+      approval_status: approvalStatus,
     });
     return res.status(200).json({
       success: true,
@@ -2404,6 +2413,172 @@ export const uploadDriverAssets = async (req: AuthRequest, res: Response) => {
       success: false,
       status: "ERROR",
       message: (err as Error).message || "Failed to upload driver assets",
+      data: null,
+    });
+  }
+};
+
+/**
+ * POST /auth/drivers/profile
+ * Driver submits their own vehicle info after self-registration. Creates profile with approval_status=pending.
+ */
+export const submitDriverProfile = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+
+    const existing = await DriverProfile.findDriverById(userId);
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        status: "ERROR",
+        message: "Driver profile already submitted",
+        data: null,
+      });
+    }
+
+    const {
+      vehicle_type,
+      vehicle_number,
+      vehicle_image_url,
+      driving_license_image_url,
+      additional_data,
+    } = req.body as {
+      vehicle_type?: string;
+      vehicle_number?: string;
+      vehicle_image_url?: string;
+      driving_license_image_url?: string;
+      additional_data?: Record<string, unknown>;
+    };
+
+    if (additional_data !== undefined && (additional_data == null || typeof additional_data !== "object" || Array.isArray(additional_data))) {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "additional_data must be an object",
+        data: null,
+      });
+    }
+
+    await DriverProfile.createDriverProfile({
+      user_id: userId,
+      owner_type: "platform",
+      owner_restaurant_id: null,
+      vehicle_type: typeof vehicle_type === "string" ? trim(vehicle_type) || null : null,
+      vehicle_number: typeof vehicle_number === "string" ? trim(vehicle_number) || null : null,
+      vehicle_image_url: typeof vehicle_image_url === "string" ? trim(vehicle_image_url) || null : null,
+      driving_license_image_url: typeof driving_license_image_url === "string" ? trim(driving_license_image_url) || null : null,
+      additional_data: additional_data ?? {},
+      is_active: false,
+      approval_status: "pending",
+      created_by_user_id: null,
+    });
+
+    const driver = await DriverProfile.findDriverById(userId);
+    return res.status(201).json({
+      success: true,
+      status: "OK",
+      message: "Driver profile submitted. Awaiting admin approval.",
+      data: { driver },
+    });
+  } catch (err) {
+    const pgError = err as { code?: string };
+    if (pgError.code === "23505") {
+      return res.status(409).json({
+        success: false,
+        status: "ERROR",
+        message: "Duplicate value detected (vehicle number)",
+        data: null,
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to submit driver profile",
+      data: null,
+    });
+  }
+};
+
+/**
+ * PATCH /auth/admin/drivers/:id/approve
+ */
+export const approveDriver = async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id;
+    const driver = await DriverProfile.findDriverById(id);
+    if (!driver) {
+      return res.status(404).json({
+        success: false,
+        status: "ERROR",
+        message: "Driver not found",
+        data: null,
+      });
+    }
+    await DriverProfile.updateDriverProfile(id, {
+      approval_status: "approved",
+      is_active: true,
+      rejection_reason: null,
+    });
+    const updated = await DriverProfile.findDriverById(id);
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Driver approved successfully",
+      data: { driver: updated },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to approve driver",
+      data: null,
+    });
+  }
+};
+
+/**
+ * PATCH /auth/admin/drivers/:id/reject
+ * Body: { reason?: string }
+ */
+export const rejectDriver = async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id;
+    const reason = typeof req.body.reason === "string" ? req.body.reason.trim() : null;
+
+    const driver = await DriverProfile.findDriverById(id);
+    if (!driver) {
+      return res.status(404).json({
+        success: false,
+        status: "ERROR",
+        message: "Driver not found",
+        data: null,
+      });
+    }
+    if (driver.approval_status === "approved") {
+      return res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Cannot reject an already approved driver. Deactivate them instead.",
+        data: null,
+      });
+    }
+    await DriverProfile.updateDriverProfile(id, {
+      approval_status: "rejected",
+      is_active: false,
+      rejection_reason: reason,
+    });
+    const updated = await DriverProfile.findDriverById(id);
+    return res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Driver rejected",
+      data: { driver: updated },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: (err as Error).message || "Failed to reject driver",
       data: null,
     });
   }

@@ -17,6 +17,8 @@ export interface DriverProfileRow {
   driving_license_image_url: string | null;
   additional_data: Record<string, unknown>;
   is_active: boolean;
+  approval_status: string;
+  rejection_reason: string | null;
   created_by_user_id: string | null;
   created_at: Date;
   updated_at: Date;
@@ -32,6 +34,8 @@ export async function createDriverProfile(input: {
   driving_license_image_url?: string | null;
   additional_data?: Record<string, unknown>;
   is_active?: boolean;
+  approval_status?: string;
+  rejection_reason?: string | null;
   created_by_user_id?: string | null;
 }): Promise<void> {
   await pool.query(
@@ -45,8 +49,9 @@ export async function createDriverProfile(input: {
        driving_license_image_url,
        additional_data,
        is_active,
+       approval_status,
        created_by_user_id
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10)`,
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11)`,
     [
       input.user_id,
       input.owner_type,
@@ -57,6 +62,7 @@ export async function createDriverProfile(input: {
       input.driving_license_image_url ?? null,
       JSON.stringify(input.additional_data ?? {}),
       input.is_active ?? true,
+      input.approval_status ?? "pending",
       input.created_by_user_id ?? null,
     ]
   );
@@ -79,6 +85,8 @@ export async function findDriverById(userId: string): Promise<DriverProfileRow |
        dp.driving_license_image_url,
        dp.additional_data,
        dp.is_active,
+       dp.approval_status,
+       dp.rejection_reason,
        dp.created_by_user_id,
        dp.created_at,
        dp.updated_at
@@ -102,6 +110,8 @@ export async function updateDriverProfile(
     driving_license_image_url?: string | null;
     additional_data?: Record<string, unknown>;
     is_active?: boolean;
+    approval_status?: string;
+    rejection_reason?: string | null;
   }
 ): Promise<void> {
   const set: string[] = [];
@@ -140,6 +150,14 @@ export async function updateDriverProfile(
     set.push(`is_active = $${i++}`);
     values.push(input.is_active);
   }
+  if (input.approval_status !== undefined) {
+    set.push(`approval_status = $${i++}`);
+    values.push(input.approval_status);
+  }
+  if (input.rejection_reason !== undefined) {
+    set.push(`rejection_reason = $${i++}`);
+    values.push(input.rejection_reason);
+  }
   if (set.length === 0) return;
 
   values.push(userId);
@@ -152,6 +170,7 @@ function buildWhere(opts?: {
   owner_restaurant_id?: string;
   owner_restaurant_ids?: string[];
   is_active?: boolean;
+  approval_status?: string;
 }): { where: string; values: unknown[] } {
   const conditions = ["ro.name = 'driver'"];
   const values: unknown[] = [];
@@ -178,6 +197,10 @@ function buildWhere(opts?: {
     conditions.push(`dp.is_active = $${i++}`);
     values.push(opts.is_active);
   }
+  if (opts?.approval_status !== undefined) {
+    conditions.push(`dp.approval_status = $${i++}`);
+    values.push(opts.approval_status);
+  }
   return { where: `WHERE ${conditions.join(" AND ")}`, values };
 }
 
@@ -187,6 +210,7 @@ export async function listDrivers(opts?: {
   owner_restaurant_id?: string;
   owner_restaurant_ids?: string[];
   is_active?: boolean;
+  approval_status?: string;
   limit?: number;
   offset?: number;
 }): Promise<DriverProfileRow[]> {
@@ -213,6 +237,8 @@ export async function listDrivers(opts?: {
        dp.driving_license_image_url,
        dp.additional_data,
        dp.is_active,
+       dp.approval_status,
+       dp.rejection_reason,
        dp.created_by_user_id,
        dp.created_at,
        dp.updated_at
@@ -233,6 +259,7 @@ export async function countDrivers(opts?: {
   owner_restaurant_id?: string;
   owner_restaurant_ids?: string[];
   is_active?: boolean;
+  approval_status?: string;
 }): Promise<number> {
   const where = buildWhere(opts);
   const r = await pool.query(

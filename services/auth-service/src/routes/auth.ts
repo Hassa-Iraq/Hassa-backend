@@ -42,9 +42,12 @@ router.patch("/admin/employees/:id", authenticate, authorize("admin"), authContr
 router.patch("/admin/employees/:id/role", authenticate, authorize("admin"), authController.assignEmployeeRole);
 router.patch("/admin/employees/:id/status", authenticate, authorize("admin"), authController.updateEmployeeStatus);
 router.post("/drivers", authenticate, authorize("admin", "restaurant"), authController.addDriver);
+router.post("/drivers/profile", authenticate, authorize("driver"), authController.submitDriverProfile);
 router.get("/drivers", authenticate, authorize("admin", "restaurant"), authController.listDrivers);
 router.get("/drivers/:id", authenticate, authorize("admin", "restaurant"), authController.getDriverById);
 router.patch("/drivers/:id", authenticate, authorize("admin", "restaurant"), authController.updateDriver);
+router.patch("/admin/drivers/:id/approve", authenticate, authorize("admin"), authController.approveDriver);
+router.patch("/admin/drivers/:id/reject", authenticate, authorize("admin"), authController.rejectDriver);
 router.post(
   "/drivers/upload-assets",
   authenticate,
