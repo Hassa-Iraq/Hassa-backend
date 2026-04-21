@@ -171,11 +171,22 @@ export async function update(id: string, params: UpdateMenuItemParams): Promise<
 export async function getRecommendedDishes(
   restaurantIds: string[],
   limit: number
-): Promise<(MenuItemRow & { restaurant_name: string })[]> {
+): Promise<(MenuItemRow & {
+  restaurant_name: string;
+  restaurant_logo_url: string | null;
+  restaurant_delivery_time_min: number | null;
+  restaurant_delivery_time_max: number | null;
+  restaurant_rating: number;
+})[]> {
   if (restaurantIds.length === 0) return [];
   const placeholders = restaurantIds.map((_, i) => `$${i + 1}`).join(", ");
   const result = await pool.query(
-    `SELECT mi.*, r.name AS restaurant_name
+    `SELECT mi.*,
+            r.name AS restaurant_name,
+            r.logo_url AS restaurant_logo_url,
+            r.delivery_time_min AS restaurant_delivery_time_min,
+            r.delivery_time_max AS restaurant_delivery_time_max,
+            COALESCE((r.additional_data ->> 'rating')::numeric, 0) AS restaurant_rating
      FROM restaurant.menu_items mi
      JOIN restaurant.restaurants r ON r.id = mi.restaurant_id
      WHERE mi.restaurant_id IN (${placeholders})

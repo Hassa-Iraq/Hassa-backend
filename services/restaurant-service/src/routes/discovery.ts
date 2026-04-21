@@ -1,15 +1,18 @@
 import express from "express";
 import * as discoveryController from "../controllers/discoveryController";
-import { authenticate, authorize } from "../middleware/auth";
+import { authenticate, authorize, optionalAuthenticate } from "../middleware/auth";
 
 const router = express.Router();
 
-router.get("/restaurants", discoveryController.listRestaurants);
-router.get("/home", discoveryController.getHomeData);
+router.get("/restaurants", optionalAuthenticate, discoveryController.listRestaurants);
+router.get("/menu-items/:id", discoveryController.getMenuItemDetails);
+router.get("/home", optionalAuthenticate, discoveryController.getHomeData);
 router.post("/cart/validate", discoveryController.validateCart);
-router.get("/restaurants/:id/details", discoveryController.getRestaurantWithMenu);
+router.get("/restaurants/:id/details", optionalAuthenticate, discoveryController.getRestaurantWithMenu);
 router.get("/restaurants/:id/menu", discoveryController.getRestaurantMenu);
-router.get("/restaurants/:id", discoveryController.getRestaurantPublic);
+router.get("/restaurants/:id/ratings", discoveryController.listRestaurantRatings);
+router.delete("/restaurants/:id/ratings/:ratingId", authenticate, authorize("admin"), discoveryController.adminDeleteRating);
+router.get("/restaurants/:id", optionalAuthenticate, discoveryController.getRestaurantPublic);
 router.get("/favorites", authenticate, authorize("customer", "admin"), discoveryController.listFavoriteRestaurants);
 router.post(
   "/restaurants/:id/favorite",
