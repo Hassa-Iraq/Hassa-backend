@@ -193,6 +193,7 @@ export async function createRestaurantByAdmin(req: AuthRequest, res: Response): 
       is_active: true,
       is_open: false,
       is_blocked: false,
+      approval_status: "approved",
     });
 
     res.status(201).json({
@@ -342,6 +343,7 @@ export async function onboardRestaurantByAdmin(req: AuthRequest, res: Response):
         is_active: true,
         is_open: false,
         is_blocked: false,
+        approval_status: "approved",
       });
 
       res.status(201).json({
@@ -527,6 +529,7 @@ export async function createBranchByAdmin(req: AuthRequest, res: Response): Prom
       is_active: true,
       is_open: false,
       is_blocked: false,
+      approval_status: "approved",
     });
 
     res.status(201).json({
@@ -559,9 +562,9 @@ export async function listMyRestaurants(req: AuthRequest, res: Response): Promis
         : undefined;
     const parsedRadiusKm = typeof radius_km === "number" && Number.isFinite(radius_km) ? radius_km : undefined;
     const rawStatus = typeof req.query.status === "string" ? req.query.status.trim().toLowerCase() : undefined;
-    const allowedStatuses = new Set(["active", "inactive", "blocked", "open", "closed"]);
+    const allowedStatuses = new Set(["active", "inactive", "blocked", "open", "closed", "pending", "approved", "rejected"]);
     const status = rawStatus && allowedStatuses.has(rawStatus)
-      ? (rawStatus as "active" | "inactive" | "blocked" | "open" | "closed")
+      ? (rawStatus as "active" | "inactive" | "blocked" | "open" | "closed" | "pending" | "approved" | "rejected")
       : undefined;
 
     const filters: Restaurant.AdminRestaurantListFilters = {
@@ -822,7 +825,7 @@ export async function approveRestaurant(req: AuthRequest, res: Response): Promis
       });
       return;
     }
-    const updated = await Restaurant.update(id, { is_active: true, is_blocked: false });
+    const updated = await Restaurant.update(id, { is_active: true, is_blocked: false, approval_status: "approved", rejection_reason: null });
     if (!updated) {
       res.status(404).json({ success: false, status: "ERROR", message: "Restaurant not found", data: null });
       return;
@@ -976,6 +979,54 @@ export async function closeRestaurant(req: AuthRequest, res: Response): Promise<
       success: false,
       status: "ERROR",
       message: err instanceof Error ? err.message : "Failed to close restaurant",
+      data: null,
+    });
+  }
+}
+
+export async function rejectRestaurant(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const id = req.params.id as string;
+    const body = req.body as Record<string, unknown>;
+    const rejectionReason = typeof body.reason === "string" ? body.reason.trim() : null;
+
+    const row = await Restaurant.findById(id);
+    if (!row) {
+      res.status(404).json({ success: false, status: "ERROR", message: "Restaurant not found", data: null });
+      return;
+    }
+    if (row.approval_status === "approved") {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "Cannot reject an already approved restaurant. Block it instead.",
+        data: null,
+      });
+      return;
+    }
+
+    const updated = await Restaurant.update(id, {
+      approval_status: "rejected",
+      is_active: false,
+      rejection_reason: rejectionReason,
+    });
+    if (!updated) {
+      res.status(404).json({ success: false, status: "ERROR", message: "Restaurant not found", data: null });
+      return;
+    }
+    await cache.del(cacheKeys.restaurant(id));
+    await cache.delPattern("restaurants:list:*");
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Restaurant rejected",
+      data: { restaurant: Restaurant.toResponse(updated) },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to reject restaurant",
       data: null,
     });
   }

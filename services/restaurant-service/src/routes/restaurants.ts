@@ -7,6 +7,7 @@ const router = express.Router();
 
 router.post("/admin/create", authenticate, authorize("admin"), restaurantController.createRestaurantByAdmin);
 router.post("/admin/onboard", authenticate, authorize("admin"), restaurantController.onboardRestaurantByAdmin);
+router.get("/admin/restaurants", authenticate, authorize("admin"), restaurantController.listRestaurantsForAdmin);
 router.get("/admin/restaurants/stats", authenticate, authorize("admin"), restaurantController.getRestaurantDashboardStats);
 router.get("/admin/restaurants/:id/branches", authenticate, authorize("admin"), restaurantController.listBranchesForAdmin);
 router.post(
@@ -31,6 +32,7 @@ router.get("/", authenticate, authorize("admin", "restaurant"), restaurantContro
 router.get("/:id", authenticate, authorize("admin", "restaurant"), restaurantController.getRestaurant);
 router.put("/:id", authenticate, authorize("admin", "restaurant"), restaurantController.updateRestaurant);
 router.patch("/:id/approve", authenticate, authorize("admin"), restaurantController.approveRestaurant);
+router.patch("/:id/reject", authenticate, authorize("admin"), restaurantController.rejectRestaurant);
 router.patch("/:id/block", authenticate, authorize("admin", "restaurant"), restaurantController.blockRestaurant);
 router.patch("/:id/unblock", authenticate, authorize("admin", "restaurant"), restaurantController.unblockRestaurant);
 router.patch("/:id/open", authenticate, authorize("restaurant"), restaurantController.openRestaurant);

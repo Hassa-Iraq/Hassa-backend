@@ -23,6 +23,8 @@ export interface RestaurantRow {
   is_active: boolean;
   is_open: boolean;
   is_blocked: boolean;
+  approval_status: string;
+  rejection_reason: string | null;
   contact_email: string | null;
   phone: string | null;
   tax_type: string;
@@ -67,6 +69,8 @@ export interface CreateRestaurantParams {
   is_active?: boolean;
   is_open?: boolean;
   is_blocked?: boolean;
+  approval_status?: string;
+  rejection_reason?: string | null;
 }
 
 export interface UpdateRestaurantParams {
@@ -97,6 +101,8 @@ export interface UpdateRestaurantParams {
   is_active?: boolean;
   is_open?: boolean;
   is_blocked?: boolean;
+  approval_status?: string;
+  rejection_reason?: string | null;
 }
 
 export interface AdminRestaurantListFilters {
@@ -107,7 +113,7 @@ export interface AdminRestaurantListFilters {
   zone?: string;
   cuisine?: string;
   radius_km?: number;
-  status?: "active" | "inactive" | "blocked" | "open" | "closed";
+  status?: "active" | "inactive" | "blocked" | "open" | "closed" | "pending" | "approved" | "rejected";
 }
 
 export interface AdminRestaurantRow extends RestaurantRow {
@@ -137,8 +143,8 @@ export async function create(params: CreateRestaurantParams): Promise<Restaurant
       delivery_time_min, delivery_time_max, tags, tin, tin_expiry_date, certificate_url,
       additional_data, contact_email, phone, tax_type, tax_rate,
       free_delivery_enabled, free_delivery_max_amount, free_delivery_min_distance_km,
-      description, is_active, is_open, is_blocked
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+      description, is_active, is_open, is_blocked, approval_status
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
     RETURNING *`,
     [
       params.user_id,
@@ -170,6 +176,7 @@ export async function create(params: CreateRestaurantParams): Promise<Restaurant
       params.is_active ?? false,
       params.is_open ?? false,
       params.is_blocked ?? false,
+      params.approval_status ?? "pending",
     ]
   );
   return r.rows[0];
@@ -284,6 +291,9 @@ export async function findAllForAdmin(filters: AdminRestaurantListFilters): Prom
     if (filters.status === "blocked") conditions.push("r.is_blocked = true");
     if (filters.status === "open") conditions.push("r.is_open = true AND r.is_blocked = false");
     if (filters.status === "closed") conditions.push("r.is_open = false AND r.is_blocked = false");
+    if (filters.status === "pending") conditions.push(`r.approval_status = 'pending'`);
+    if (filters.status === "approved") conditions.push(`r.approval_status = 'approved'`);
+    if (filters.status === "rejected") conditions.push(`r.approval_status = 'rejected'`);
   }
 
   values.push(filters.limit);
@@ -355,6 +365,9 @@ export async function countAllForAdmin(
     if (filters.status === "blocked") conditions.push("is_blocked = true");
     if (filters.status === "open") conditions.push("is_open = true AND is_blocked = false");
     if (filters.status === "closed") conditions.push("is_open = false AND is_blocked = false");
+    if (filters.status === "pending") conditions.push(`approval_status = 'pending'`);
+    if (filters.status === "approved") conditions.push(`approval_status = 'approved'`);
+    if (filters.status === "rejected") conditions.push(`approval_status = 'rejected'`);
   }
 
   const r = await pool.query(
@@ -465,7 +478,7 @@ export async function update(id: string, params: UpdateRestaurantParams): Promis
     "delivery_time_min", "delivery_time_max", "tags", "tin", "tin_expiry_date",
     "certificate_url", "additional_data", "contact_email", "phone", "tax_type", "tax_rate",
     "free_delivery_enabled", "free_delivery_max_amount", "free_delivery_min_distance_km",
-    "description", "is_active", "is_open", "is_blocked",
+    "description", "is_active", "is_open", "is_blocked", "approval_status", "rejection_reason",
   ];
   const updates: string[] = [];
   const values: unknown[] = [];
@@ -520,6 +533,8 @@ export function toResponse(row: RestaurantRow): Record<string, unknown> {
     is_active: row.is_active,
     is_open: row.is_open,
     is_blocked: row.is_blocked,
+    approval_status: row.approval_status ?? "pending",
+    rejection_reason: row.rejection_reason ?? null,
     contact_email: row.contact_email,
     phone: row.phone,
     tax_type: row.tax_type,
