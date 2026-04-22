@@ -91,6 +91,7 @@ services:
       redis:
         condition: service_healthy
     volumes:
+      - ./services/auth-service/src:/app/src
       - auth_uploads:/app/uploads
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3001/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1));\""]
@@ -135,6 +136,7 @@ services:
       auth-service:
         condition: service_healthy
     volumes:
+      - ./services/restaurant-service/src:/app/src
       - restaurant_uploads:/app/uploads
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3002/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1));\""]
@@ -180,6 +182,8 @@ services:
         condition: service_healthy
       wallet-service:
         condition: service_healthy
+    volumes:
+      - ./services/order-service/src:/app/src
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3003/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1));\""]
       interval: 10s
@@ -225,6 +229,8 @@ services:
         condition: service_healthy
       wallet-service:
         condition: service_healthy
+    volumes:
+      - ./services/delivery-service/src:/app/src
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3004/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1));\""]
       interval: 10s
@@ -312,6 +318,8 @@ services:
         condition: service_healthy
       auth-service:
         condition: service_healthy
+    volumes:
+      - ./services/notification-service/src:/app/src
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3006/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1));\""]
       interval: 10s
@@ -350,6 +358,8 @@ services:
         condition: service_healthy
       auth-service:
         condition: service_healthy
+    volumes:
+      - ./services/admin-analytics-service/src:/app/src
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3007/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1));\""]
       interval: 10s
@@ -390,6 +400,8 @@ services:
         condition: service_healthy
       auth-service:
         condition: service_healthy
+    volumes:
+      - ./services/wallet-service/src:/app/src
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3009/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1));\""]
       interval: 10s
