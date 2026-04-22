@@ -4,6 +4,7 @@ import * as Order from "../models/Order";
 import { AuthRequest } from "../middleware/auth";
 import * as DeliveryAddress from "../utils/deliveryAddress";
 import { publish } from "../utils/redisPublisher";
+import pool from "../db/connection";
 
 interface IncomingOrderItem {
   menu_item_id?: string;
@@ -49,6 +50,7 @@ const ALLOWED_NEXT_STATUSES: Record<Order.OrderStatus, Order.OrderStatus[]> = {
 
 const ORDER_LIST_STATUS_MAP: Record<string, Order.OrderStatus[] | null> = {
   all: [],
+  active: ["pending", "confirmed", "preparing", "ready_for_pickup", "out_for_delivery"],
   pending: ["pending"],
   accepted: ["confirmed"],
   processing: ["preparing", "ready_for_pickup"],
@@ -578,7 +580,7 @@ export async function listOrders(req: AuthRequest, res: Response): Promise<void>
         success: false,
         status: "ERROR",
         message:
-          "Invalid status filter. Use one of: All, Pending, Accepted, Processing, Food on the way, Delivered, Cancelled, Payment Failed, Refunded, Offline Payments",
+          "Invalid status filter. Use one of: All, Active, Pending, Accepted, Processing, Food on the way, Delivered, Cancelled, Payment Failed, Refunded, Offline Payments",
         data: null,
       });
       return;
@@ -901,4 +903,126 @@ export async function updateOrderStatus(req: AuthRequest, res: Response): Promis
       data: null,
     });
   }
+}
+
+const ACTIVE_STATUSES: Order.OrderStatus[] = ["pending", "confirmed", "preparing", "ready_for_pickup", "out_for_delivery"];
+
+function pctChange(current: number, previous: number): number {
+  if (previous === 0) return current > 0 ? 100 : 0;
+  return Math.round(((current - previous) / previous) * 1000) / 10;
+}
+
+export async function getRestaurantAnalytics(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    let restaurantIds: string[] = [];
+
+    if (req.user?.role === "restaurant") {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        res.status(401).json({ success: false, status: "ERROR", message: "Authorization header missing", data: null });
+        return;
+      }
+      restaurantIds = await getOwnedRestaurantIds(authHeader);
+      if (restaurantIds.length === 0) {
+        res.status(200).json({ success: true, status: "OK", message: "No restaurants found", data: emptyAnalytics() });
+        return;
+      }
+    } else {
+      const rid = typeof req.query.restaurant_id === "string" ? req.query.restaurant_id.trim() : null;
+      if (!rid) {
+        res.status(400).json({ success: false, status: "ERROR", message: "restaurant_id is required for admin", data: null });
+        return;
+      }
+      restaurantIds = [rid];
+    }
+
+    const now = new Date();
+    const periodDays = typeof req.query.period === "string" && req.query.period === "7" ? 7 : 30;
+    const currentStart = new Date(now.getTime() - periodDays * 24 * 60 * 60 * 1000);
+    const previousStart = new Date(currentStart.getTime() - periodDays * 24 * 60 * 60 * 1000);
+    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+
+    const [revenueResult, monthlyResult, activeResult] = await Promise.all([
+      pool.query<{ current_revenue: string; previous_revenue: string; current_orders: string; previous_orders: string }>(
+        `SELECT
+           COALESCE(SUM(total_amount) FILTER (WHERE placed_at >= $3 AND status = 'delivered'), 0) AS current_revenue,
+           COALESCE(SUM(total_amount) FILTER (WHERE placed_at >= $4 AND placed_at < $3 AND status = 'delivered'), 0) AS previous_revenue,
+           COUNT(*) FILTER (WHERE placed_at >= $3) AS current_orders,
+           COUNT(*) FILTER (WHERE placed_at >= $4 AND placed_at < $3) AS previous_orders
+         FROM orders.orders
+         WHERE restaurant_id = ANY($1)
+           AND placed_at >= $4
+           AND placed_at <= $2`,
+        [restaurantIds, now, currentStart, previousStart]
+      ),
+      pool.query<{ month: string; revenue: string; orders: string }>(
+        `SELECT
+           TO_CHAR(DATE_TRUNC('month', placed_at), 'Mon') AS month,
+           COALESCE(SUM(total_amount) FILTER (WHERE status = 'delivered'), 0) AS revenue,
+           COUNT(*) AS orders
+         FROM orders.orders
+         WHERE restaurant_id = ANY($1)
+           AND placed_at >= $2
+         GROUP BY DATE_TRUNC('month', placed_at)
+         ORDER BY DATE_TRUNC('month', placed_at) ASC`,
+        [restaurantIds, sixMonthsAgo]
+      ),
+      pool.query<{ active_orders: string }>(
+        `SELECT COUNT(*) AS active_orders
+         FROM orders.orders
+         WHERE restaurant_id = ANY($1)
+           AND status = ANY($2)`,
+        [restaurantIds, ACTIVE_STATUSES]
+      ),
+    ]);
+
+    const currentRevenue = parseFloat(revenueResult.rows[0]?.current_revenue ?? "0");
+    const previousRevenue = parseFloat(revenueResult.rows[0]?.previous_revenue ?? "0");
+    const currentOrders = parseInt(revenueResult.rows[0]?.current_orders ?? "0");
+    const previousOrders = parseInt(revenueResult.rows[0]?.previous_orders ?? "0");
+    const activeOrders = parseInt(activeResult.rows[0]?.active_orders ?? "0");
+
+    const revenueGraph = monthlyResult.rows.map((r) => ({
+      month: r.month,
+      revenue: parseFloat(r.revenue),
+      orders: parseInt(r.orders),
+    }));
+
+    res.status(200).json({
+      success: true,
+      status: "OK",
+      message: "Restaurant analytics retrieved",
+      data: {
+        period_days: periodDays,
+        revenue: {
+          current: currentRevenue,
+          previous: previousRevenue,
+          change_pct: pctChange(currentRevenue, previousRevenue),
+        },
+        orders: {
+          total: currentOrders,
+          previous: previousOrders,
+          change_pct: pctChange(currentOrders, previousOrders),
+          active: activeOrders,
+        },
+        revenue_graph: revenueGraph,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      status: "ERROR",
+      message: err instanceof Error ? err.message : "Failed to fetch analytics",
+      data: null,
+    });
+  }
+}
+
+function emptyAnalytics() {
+  return {
+    period_days: 30,
+    revenue: { current: 0, previous: 0, change_pct: 0 },
+    orders: { total: 0, previous: 0, change_pct: 0, active: 0 },
+    revenue_graph: [],
+  };
 }
