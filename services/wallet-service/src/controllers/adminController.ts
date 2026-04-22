@@ -95,6 +95,38 @@ export async function adjustWallet(req: AuthRequest, res: Response): Promise<voi
   }
 }
 
+export async function addFunds(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const { userId } = req.params;
+    const body = req.body as Record<string, unknown>;
+    const amount = typeof body.amount === "number" ? body.amount : parseFloat(String(body.amount));
+    const note = typeof body.note === "string" ? body.note.trim() : "";
+
+    if (!amount || amount <= 0 || !isFinite(amount)) {
+      res.status(400).json({ success: false, status: "ERROR", message: "amount must be a positive number", data: null });
+      return;
+    }
+    if (!note) {
+      res.status(400).json({ success: false, status: "ERROR", message: "note is required", data: null });
+      return;
+    }
+
+    await Wallet.ensureWallet(userId);
+    const tx = await Wallet.credit({ userId, amount: Number(amount.toFixed(2)), type: "adjustment", note });
+    const wallet = await Wallet.findByUserId(userId);
+
+    res.status(200).json({
+      success: true, status: "OK", message: "Funds added successfully",
+      data: {
+        transaction: Wallet.transactionToResponse(tx),
+        new_balance: wallet ? parseFloat(wallet.balance) : null,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, status: "ERROR", message: err instanceof Error ? err.message : "Failed to add funds", data: null });
+  }
+}
+
 export async function freezeWallet(req: AuthRequest, res: Response): Promise<void> {
   try {
     const { userId } = req.params;
