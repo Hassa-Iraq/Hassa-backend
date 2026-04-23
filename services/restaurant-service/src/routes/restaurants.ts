@@ -28,6 +28,7 @@ router.post("/branches", authenticate, authorize("admin", "restaurant"), (req: A
   }
   return restaurantController.createBranch(req, res);
 });
+router.post("/", authenticate, authorize("restaurant"), restaurantController.createRestaurant);
 router.get("/", authenticate, authorize("admin", "restaurant"), restaurantController.listMyRestaurants);
 router.get("/:id", authenticate, authorize("admin", "restaurant"), restaurantController.getRestaurant);
 router.put("/:id", authenticate, authorize("admin", "restaurant"), restaurantController.updateRestaurant);
