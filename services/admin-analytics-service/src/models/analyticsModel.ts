@@ -50,8 +50,10 @@ export interface TopRestaurantRow {
 export interface TopRatedFoodRow {
   menu_item_id: string;
   menu_item_name: string;
+  menu_item_image_url: string | null;
   restaurant_id: string;
   restaurant_name: string;
+  restaurant_logo_url: string | null;
   rating_score: string | number;
   quantity_sold: number;
   order_items_count: number;
@@ -60,8 +62,10 @@ export interface TopRatedFoodRow {
 export interface TopSellingFoodRow {
   menu_item_id: string;
   menu_item_name: string;
+  menu_item_image_url: string | null;
   restaurant_id: string;
   restaurant_name: string;
+  restaurant_logo_url: string | null;
   quantity_sold: number;
   total_revenue: string | number;
   order_items_count: number;
@@ -320,8 +324,10 @@ export async function getTopRatedFood(
     `SELECT
        mi.id AS menu_item_id,
        mi.name AS menu_item_name,
+       mi.image_url AS menu_item_image_url,
        r.id AS restaurant_id,
        r.name AS restaurant_name,
+       r.logo_url AS restaurant_logo_url,
        COALESCE((r.additional_data ->> 'rating')::numeric, 0) AS rating_score,
        COALESCE(SUM(CASE WHEN o.id IS NOT NULL THEN oi.quantity ELSE 0 END), 0)::int AS quantity_sold,
        COUNT(CASE WHEN o.id IS NOT NULL THEN oi.id END)::int AS order_items_count
@@ -330,7 +336,7 @@ export async function getTopRatedFood(
      LEFT JOIN orders.order_items oi ON oi.menu_item_id = mi.id
      LEFT JOIN orders.orders o ON o.id = oi.order_id${orderJoinFilter}
      WHERE r.parent_id IS NULL
-     GROUP BY mi.id, mi.name, r.id, r.name, r.additional_data
+     GROUP BY mi.id, mi.name, mi.image_url, r.id, r.name, r.logo_url, r.additional_data
      ORDER BY rating_score DESC, quantity_sold DESC, order_items_count DESC
      LIMIT $${params.length}`,
     params
@@ -350,8 +356,10 @@ export async function getTopSellingFood(
     `SELECT
        mi.id AS menu_item_id,
        mi.name AS menu_item_name,
+       mi.image_url AS menu_item_image_url,
        r.id AS restaurant_id,
        r.name AS restaurant_name,
+       r.logo_url AS restaurant_logo_url,
        COALESCE(SUM(oi.quantity), 0)::int AS quantity_sold,
        COALESCE(SUM(oi.line_total), 0) AS total_revenue,
        COUNT(oi.id)::int AS order_items_count
@@ -361,7 +369,7 @@ export async function getTopSellingFood(
      JOIN restaurant.restaurants r ON r.id = o.restaurant_id
      WHERE r.parent_id IS NULL
        AND o.status NOT IN ('cancelled', 'rejected')${dateCondition}
-     GROUP BY mi.id, mi.name, r.id, r.name
+     GROUP BY mi.id, mi.name, mi.image_url, r.id, r.name, r.logo_url
      ORDER BY quantity_sold DESC, total_revenue DESC, order_items_count DESC
      LIMIT $${params.length}`,
     params
