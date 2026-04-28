@@ -154,10 +154,11 @@ export async function listPayouts(req: AuthRequest, res: Response): Promise<void
     const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit)) || 20));
     const offset = (page - 1) * limit;
     const status = typeof req.query.status === "string" ? req.query.status as Payout.PayoutStatus : undefined;
+    const role = typeof req.query.role === "string" ? req.query.role : undefined;
 
     const [payouts, total] = await Promise.all([
-      Payout.listAll({ limit, offset, status }),
-      Payout.countAll(status),
+      Payout.listAll({ limit, offset, status, role }),
+      Payout.countAll(status, role),
     ]);
 
     res.status(200).json({
