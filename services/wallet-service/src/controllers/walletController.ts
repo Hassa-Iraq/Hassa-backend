@@ -113,11 +113,7 @@ export async function requestPayout(req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    const wallet = await Wallet.findByUserId(userId);
-    if (!wallet) {
-      res.status(400).json({ success: false, status: "ERROR", message: "Wallet not found", data: null });
-      return;
-    }
+    const wallet = await Wallet.ensureWallet(userId);
     if (parseFloat(wallet.balance) < amount) {
       res.status(400).json({
         success: false,
