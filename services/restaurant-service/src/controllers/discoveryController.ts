@@ -13,17 +13,12 @@ function normalizeImageUrl(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
-  if (trimmed.startsWith("{{")) return trimmed;
-  if (trimmed.startsWith("/")) return trimmed;
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-    try {
-      const parsed = new URL(trimmed);
-      return parsed.pathname || null;
-    } catch {
-      return trimmed;
-    }
+    return trimmed;
   }
-  return `/${trimmed.replace(/^\/+/, "")}`;
+  const relativePath = `/${trimmed.replace(/^\/+/, "")}`;
+  const fileBaseUrl = process.env.FILE_BASE_URL?.replace(/\/$/, "") ?? "";
+  return fileBaseUrl ? `${fileBaseUrl}${relativePath}` : relativePath;
 }
 
 function parseCoordinate(value: unknown): number | null {
@@ -538,9 +533,9 @@ export async function getRestaurantWithMenu(req: AuthRequest, res: Response): Pr
       const [isFavorite, popularRows] = await Promise.all([
         userId
           ? pool.query(
-              `SELECT 1 FROM restaurant.customer_favorite_restaurants WHERE user_id = $1 AND restaurant_id = $2`,
-              [userId, id]
-            ).then((r) => r.rowCount! > 0)
+            `SELECT 1 FROM restaurant.customer_favorite_restaurants WHERE user_id = $1 AND restaurant_id = $2`,
+            [userId, id]
+          ).then((r) => r.rowCount! > 0)
           : Promise.resolve(false),
         getPopularItems(id, 10),
       ]);
@@ -620,9 +615,9 @@ export async function getRestaurantWithMenu(req: AuthRequest, res: Response): Pr
       getPopularItems(id, 10),
       userId
         ? pool.query(
-            `SELECT 1 FROM restaurant.customer_favorite_restaurants WHERE user_id = $1 AND restaurant_id = $2`,
-            [userId, id]
-          ).then((r) => r.rowCount! > 0)
+          `SELECT 1 FROM restaurant.customer_favorite_restaurants WHERE user_id = $1 AND restaurant_id = $2`,
+          [userId, id]
+        ).then((r) => r.rowCount! > 0)
         : Promise.resolve(false),
     ]);
 

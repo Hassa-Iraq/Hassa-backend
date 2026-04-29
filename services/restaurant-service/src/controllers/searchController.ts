@@ -5,17 +5,12 @@ function normalizeImageUrl(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
-  if (trimmed.startsWith("{{")) return trimmed;
-  if (trimmed.startsWith("/")) return trimmed;
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-    try {
-      const parsed = new URL(trimmed);
-      return parsed.pathname || null;
-    } catch {
-      return trimmed;
-    }
+    return trimmed;
   }
-  return `/${trimmed.replace(/^\/+/, "")}`;
+  const relativePath = `/${trimmed.replace(/^\/+/, "")}`;
+  const fileBaseUrl = process.env.FILE_BASE_URL?.replace(/\/$/, "") ?? "";
+  return fileBaseUrl ? `${fileBaseUrl}${relativePath}` : relativePath;
 }
 
 function parseCoordinate(value: unknown): number | null {
