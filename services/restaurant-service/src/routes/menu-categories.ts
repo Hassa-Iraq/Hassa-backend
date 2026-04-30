@@ -13,8 +13,8 @@ router.post(
   upload.single("category_image"),
   menuCategoryController.uploadCategoryImage
 );
-router.get("/", authenticate, authorize("restaurant"), menuCategoryController.listCategories);
-router.get("/:id", authenticate, authorize("restaurant"), menuCategoryController.getCategory);
+router.get("/", authenticate, authorize("admin", "restaurant"), menuCategoryController.listCategories);
+router.get("/:id", authenticate, authorize("admin", "restaurant"), menuCategoryController.getCategory);
 router.put("/:id", authenticate, authorize("restaurant"), menuCategoryController.updateCategory);
 router.delete("/:id", authenticate, authorize("restaurant"), menuCategoryController.deleteCategory);
 

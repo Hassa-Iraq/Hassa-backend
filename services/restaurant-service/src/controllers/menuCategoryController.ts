@@ -115,8 +115,10 @@ export async function listCategories(req: AuthRequest, res: Response): Promise<v
       });
       return;
     }
-    const ok = await ensureRestaurantOwnership(req, res, restaurant_id);
-    if (!ok) return;
+    if (req.user?.role !== "admin") {
+      const ok = await ensureRestaurantOwnership(req, res, restaurant_id);
+      if (!ok) return;
+    }
     const page = Math.max(1, parseInt(String(req.query.page)) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit)) || 20));
     const offset = (page - 1) * limit;
@@ -167,8 +169,10 @@ export async function getCategory(req: AuthRequest, res: Response): Promise<void
       });
       return;
     }
-    const ok = await ensureRestaurantOwnership(req, res, category.restaurant_id);
-    if (!ok) return;
+    if (req.user?.role !== "admin") {
+      const ok = await ensureRestaurantOwnership(req, res, category.restaurant_id);
+      if (!ok) return;
+    }
     const subcategories = await MenuCategory.findSubcategories(category.id);
     res.status(200).json({
       success: true,
