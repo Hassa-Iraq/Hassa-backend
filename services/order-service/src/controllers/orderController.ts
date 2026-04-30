@@ -835,6 +835,8 @@ export async function updateOrderStatus(req: AuthRequest, res: Response): Promis
       return;
     }
 
+    const cancellationReason = typeof req.body.reason === "string" ? req.body.reason.trim() || null : null;
+
     const order = await ensureOrderAccess(req, res, id);
     if (!order) return;
 
@@ -849,7 +851,7 @@ export async function updateOrderStatus(req: AuthRequest, res: Response): Promis
       return;
     }
 
-    const updated = await Order.updateStatus(order.id, nextStatus);
+    const updated = await Order.updateStatus(order.id, nextStatus, cancellationReason);
     if (!updated) {
       res.status(404).json({
         success: false,

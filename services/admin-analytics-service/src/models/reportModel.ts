@@ -2,9 +2,6 @@ import pool from "../db/connection";
 
 const COMMISSION = parseFloat(process.env.PLATFORM_COMMISSION_RATE || "0.15");
 
-// ─────────────────────────────────────────────────────────────
-// Shared filter builder
-// ─────────────────────────────────────────────────────────────
 function buildDateFilter(
   params: unknown[],
   dateFrom?: string,
@@ -13,13 +10,10 @@ function buildDateFilter(
 ): string {
   const parts: string[] = [];
   if (dateFrom) parts.push(`${col} >= $${params.push(dateFrom)}`);
-  if (dateTo)   parts.push(`${col} <= $${params.push(dateTo + " 23:59:59")}`);
+  if (dateTo) parts.push(`${col} <= $${params.push(dateTo + " 23:59:59")}`);
   return parts.length ? parts.join(" AND ") : "";
 }
 
-// ─────────────────────────────────────────────────────────────
-// TRANSACTION REPORT
-// ─────────────────────────────────────────────────────────────
 export interface TransactionSummary {
   completed_total: number;
   refunded_total: number;
@@ -93,9 +87,9 @@ export async function getTransactionSummary(params: {
 
   const row = r.rows[0];
   return {
-    completed_total:    parseFloat(row.completed_total),
-    refunded_total:     parseFloat(row.refunded_total),
-    admin_earning:      parseFloat(row.admin_earning),
+    completed_total: parseFloat(row.completed_total),
+    refunded_total: parseFloat(row.refunded_total),
+    admin_earning: parseFloat(row.admin_earning),
     restaurant_earning: parseFloat(row.restaurant_earning),
     deliveryman_earning: parseFloat(driverR.rows[0].total),
   };
@@ -189,12 +183,16 @@ export async function getFoodReport(params: {
   offset: number;
 }): Promise<FoodReportRow[]> {
   const values: unknown[] = [];
-  const conditions: string[] = ["o.status = 'delivered'"];
-  if (params.restaurantId) conditions.push(`r.id = $${values.push(params.restaurantId)}`);
-  if (params.categoryId)   conditions.push(`mi.category_id = $${values.push(params.categoryId)}`);
+
+  const joinConditions: string[] = ["o.status = 'delivered'"];
   const df = buildDateFilter(values, params.dateFrom, params.dateTo);
-  if (df) conditions.push(df);
-  const where = `WHERE ${conditions.join(" AND ")}`;
+  if (df) joinConditions.push(df);
+  const joinExtra = joinConditions.map(c => `AND ${c}`).join(" ");
+
+  const whereConditions: string[] = [];
+  if (params.restaurantId) whereConditions.push(`r.id = $${values.push(params.restaurantId)}`);
+  if (params.categoryId) whereConditions.push(`mi.category_id = $${values.push(params.categoryId)}`);
+  const where = whereConditions.length ? `WHERE ${whereConditions.join(" AND ")}` : "";
 
   const r = await pool.query<FoodReportRow>(
     `SELECT
@@ -217,7 +215,8 @@ export async function getFoodReport(params: {
      FROM restaurant.menu_items mi
      JOIN restaurant.restaurants r ON r.id = mi.restaurant_id
      LEFT JOIN orders.order_items oi ON oi.menu_item_id = mi.id
-     LEFT JOIN orders.orders o ON o.id = oi.order_id ${where.replace("WHERE", "AND")}
+     LEFT JOIN orders.orders o ON o.id = oi.order_id ${joinExtra}
+     ${where}
      GROUP BY mi.id, mi.name, mi.image_url, mi.price, r.id, r.name
      ORDER BY total_amount_sold DESC
      LIMIT $${values.push(params.limit)} OFFSET $${values.push(params.offset)}`,
@@ -258,18 +257,18 @@ export async function countFoodReport(params: {
   const values: unknown[] = [];
   const conditions: string[] = [];
   if (params.restaurantId) conditions.push(`mi.restaurant_id = $${values.push(params.restaurantId)}`);
-  if (params.categoryId)   conditions.push(`mi.category_id = $${values.push(params.categoryId)}`);
+  if (params.categoryId) conditions.push(`mi.category_id = $${values.push(params.categoryId)}`);
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const r = await pool.query<{ total: string }>(
-    `SELECT COUNT(*)::text AS total FROM restaurant.menu_items mi ${where}`,
+    `SELECT COUNT(*)::text AS total
+     FROM restaurant.menu_items mi
+     JOIN restaurant.restaurants r ON r.id = mi.restaurant_id
+     ${where}`,
     values
   );
   return parseInt(r.rows[0].total);
 }
 
-// ─────────────────────────────────────────────────────────────
-// RESTAURANT REPORT
-// ─────────────────────────────────────────────────────────────
 export interface RestaurantReportRow {
   restaurant_id: string;
   restaurant_name: string;

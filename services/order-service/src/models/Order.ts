@@ -33,6 +33,7 @@ export interface OrderRow {
   out_for_delivery_at: Date | null;
   delivered_at: Date | null;
   cancelled_at: Date | null;
+  cancellation_reason: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -511,6 +512,7 @@ export async function findDetailsById(id: string): Promise<OrderDetailsRecord | 
     out_for_delivery_at: row.out_for_delivery_at,
     delivered_at: row.delivered_at,
     cancelled_at: row.cancelled_at,
+    cancellation_reason: row.cancellation_reason ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -624,7 +626,11 @@ export async function countCustomers(filters: Omit<ListCustomersFilters, "limit"
   return r.rows[0]?.total ?? 0;
 }
 
-export async function updateStatus(id: string, status: OrderStatus): Promise<OrderRow | null> {
+export async function updateStatus(
+  id: string,
+  status: OrderStatus,
+  cancellationReason?: string | null
+): Promise<OrderRow | null> {
   const statusToTimeColumn: Partial<Record<OrderStatus, string>> = {
     confirmed: "confirmed_at",
     preparing: "preparing_at",
@@ -637,10 +643,15 @@ export async function updateStatus(id: string, status: OrderStatus): Promise<Ord
   const timeColumn = statusToTimeColumn[status];
   let query = "UPDATE orders.orders SET status = $1";
   const values: unknown[] = [status];
-  const idx = 2;
+  let idx = 2;
 
   if (timeColumn) {
     query += `, ${timeColumn} = NOW()`;
+  }
+
+  if (status === "cancelled" && cancellationReason) {
+    query += `, cancellation_reason = $${idx++}`;
+    values.push(cancellationReason);
   }
 
   query += ` WHERE id = $${idx} RETURNING *`;
@@ -676,6 +687,7 @@ export function toResponse(order: OrderRow, items: OrderItemRow[]): Record<strin
     out_for_delivery_at: order.out_for_delivery_at,
     delivered_at: order.delivered_at,
     cancelled_at: order.cancelled_at,
+    cancellation_reason: order.cancellation_reason ?? null,
     items: items.map((item) => ({
       id: item.id,
       menu_item_id: item.menu_item_id,
