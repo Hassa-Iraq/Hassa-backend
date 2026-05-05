@@ -36,6 +36,7 @@ export interface OrderRow {
   cancellation_reason: string | null;
   created_at: Date;
   updated_at: Date;
+  is_rated?: boolean;
 }
 
 export interface OrderItemSelectedOptionRow {
@@ -344,7 +345,13 @@ function mapOrderRow(raw: Record<string, unknown>): OrderRow {
 }
 
 export async function findById(id: string): Promise<OrderRow | null> {
-  const r = await pool.query("SELECT * FROM orders.orders WHERE id = $1", [id]);
+  const r = await pool.query(
+    `SELECT o.*, 
+       EXISTS(SELECT 1 FROM restaurant.restaurant_ratings rr WHERE rr.order_id = o.id) AS is_rated
+     FROM orders.orders o 
+     WHERE id = $1`,
+    [id]
+  );
   const raw = r.rows[0];
   return raw ? mapOrderRow(raw as Record<string, unknown>) : null;
 }
@@ -461,6 +468,7 @@ export async function findDetailsById(id: string): Promise<OrderDetailsRecord | 
   >(
     `SELECT
        o.*,
+       EXISTS(SELECT 1 FROM restaurant.restaurant_ratings rr WHERE rr.order_id = o.id) AS is_rated,
        u.full_name AS customer_full_name,
        u.email AS customer_email,
        u.phone AS customer_phone,
@@ -515,6 +523,7 @@ export async function findDetailsById(id: string): Promise<OrderDetailsRecord | 
     cancellation_reason: row.cancellation_reason ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    is_rated: row.is_rated ?? false,
   };
 
   const customer: OrderCustomerInfo | null = row.user_id
@@ -559,7 +568,8 @@ export async function list(filters: ListOrdersFilters): Promise<OrderRow[]> {
   const offsetPlaceholder = `$${where.values.length + 2}`;
 
   const r = await pool.query(
-    `SELECT o.*
+    `SELECT o.*,
+       EXISTS(SELECT 1 FROM restaurant.restaurant_ratings rr WHERE rr.order_id = o.id) AS is_rated
      FROM orders.orders o
      ${where.where}
      ORDER BY o.created_at DESC
@@ -688,6 +698,7 @@ export function toResponse(order: OrderRow, items: OrderItemRow[]): Record<strin
     delivered_at: order.delivered_at,
     cancelled_at: order.cancelled_at,
     cancellation_reason: order.cancellation_reason ?? null,
+    is_rated: order.is_rated ?? false,
     items: items.map((item) => ({
       id: item.id,
       menu_item_id: item.menu_item_id,
