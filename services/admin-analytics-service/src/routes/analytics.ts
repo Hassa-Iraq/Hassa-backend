@@ -17,5 +17,7 @@ router.get("/top-selling-food", authenticate, authorize("admin"), analyticsContr
 router.get("/reports/transactions", authenticate, authorize("admin"), reportController.transactionReport);
 router.get("/reports/food",         authenticate, authorize("admin"), reportController.foodReport);
 router.get("/reports/restaurants",  authenticate, authorize("admin"), reportController.restaurantReport);
+router.get("/reports/wallet/transactions", authenticate, authorize("admin"), reportController.walletTransactionReport);
+router.get("/reports/wallet/customers",    authenticate, authorize("admin"), reportController.walletCustomerOptions);
 
 export default router;

@@ -355,3 +355,167 @@ export async function countRestaurantReport(params: { zone?: string }): Promise<
   );
   return parseInt(r.rows[0].total);
 }
+
+export interface WalletCustomerOption {
+  id: string;
+  full_name: string | null;
+  phone: string | null;
+  email: string | null;
+}
+
+export interface WalletTransactionSummary {
+  debit_total: number;
+  credit_total: number;
+}
+
+export interface WalletTransactionReportRow {
+  transaction_id: string;
+  customer_id: string;
+  customer_name: string | null;
+  customer_phone: string | null;
+  credit: number;
+  debit: number;
+  balance: number;
+  transaction_type: string;
+  reference_type: string | null;
+  reference_id: string | null;
+  created_at: string;
+}
+
+function buildWalletTxWhere(params: {
+  customerId?: string;
+  q?: string;
+  direction?: "credit" | "debit";
+  type?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}) {
+  const values: unknown[] = [];
+  const conditions: string[] = [];
+
+  if (params.customerId) conditions.push(`w.user_id = $${values.push(params.customerId)}`);
+  if (params.direction) conditions.push(`t.direction = $${values.push(params.direction)}`);
+  if (params.type) conditions.push(`t.type = $${values.push(params.type)}`);
+
+  const df = buildDateFilter(values, params.dateFrom, params.dateTo, "t.created_at");
+  if (df) conditions.push(df);
+
+  if (params.q) {
+    const q = `%${params.q}%`;
+    const idx = values.push(q);
+    // also match phone/email/name using same placeholder
+    conditions.push(`(u.full_name ILIKE $${idx} OR u.phone ILIKE $${idx} OR u.email ILIKE $${idx})`);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  return { where, values };
+}
+
+export async function listWalletCustomers(params: {
+  q?: string;
+  limit: number;
+}): Promise<WalletCustomerOption[]> {
+  const values: unknown[] = [];
+  const conditions: string[] = ["ro.name = 'customer'"];
+  if (params.q) {
+    const q = `%${params.q}%`;
+    const idx = values.push(q);
+    conditions.push(`(u.full_name ILIKE $${idx} OR u.phone ILIKE $${idx} OR u.email ILIKE $${idx})`);
+  }
+  values.push(params.limit);
+
+  const r = await pool.query<WalletCustomerOption>(
+    `SELECT u.id, u.full_name, u.phone, u.email
+     FROM auth.users u
+     JOIN auth.roles ro ON ro.id = u.role_id
+     WHERE ${conditions.join(" AND ")}
+     ORDER BY u.full_name NULLS LAST, u.created_at DESC
+     LIMIT $${values.length}`,
+    values
+  );
+  return r.rows;
+}
+
+export async function getWalletTransactionSummary(params: {
+  customerId?: string;
+  q?: string;
+  direction?: "credit" | "debit";
+  type?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<WalletTransactionSummary> {
+  const { where, values } = buildWalletTxWhere(params);
+  const r = await pool.query<{ debit_total: string; credit_total: string }>(
+    `SELECT
+       COALESCE(SUM(CASE WHEN t.direction = 'debit'  THEN t.amount ELSE 0 END), 0)::text  AS debit_total,
+       COALESCE(SUM(CASE WHEN t.direction = 'credit' THEN t.amount ELSE 0 END), 0)::text  AS credit_total
+     FROM wallet.transactions t
+     JOIN wallet.wallets w ON w.id = t.wallet_id
+     JOIN auth.users u ON u.id = w.user_id
+     ${where}`,
+    values
+  );
+  return {
+    debit_total: parseFloat(r.rows[0]?.debit_total ?? "0"),
+    credit_total: parseFloat(r.rows[0]?.credit_total ?? "0"),
+  };
+}
+
+export async function getWalletTransactions(params: {
+  customerId?: string;
+  q?: string;
+  direction?: "credit" | "debit";
+  type?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  limit: number;
+  offset: number;
+}): Promise<WalletTransactionReportRow[]> {
+  const { where, values } = buildWalletTxWhere(params);
+  values.push(params.limit, params.offset);
+  const limitIdx = values.length - 1;
+  const offsetIdx = values.length;
+
+  const r = await pool.query<WalletTransactionReportRow>(
+    `SELECT
+       t.id                                         AS transaction_id,
+       w.user_id                                    AS customer_id,
+       u.full_name                                  AS customer_name,
+       u.phone                                      AS customer_phone,
+       CASE WHEN t.direction = 'credit' THEN t.amount::float ELSE 0 END AS credit,
+       CASE WHEN t.direction = 'debit'  THEN t.amount::float ELSE 0 END AS debit,
+       t.balance_after::float                       AS balance,
+       t.type::text                                 AS transaction_type,
+       t.reference_type,
+       t.reference_id::text                         AS reference_id,
+       t.created_at
+     FROM wallet.transactions t
+     JOIN wallet.wallets w ON w.id = t.wallet_id
+     JOIN auth.users u ON u.id = w.user_id
+     ${where}
+     ORDER BY t.created_at DESC
+     LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+    values
+  );
+  return r.rows;
+}
+
+export async function countWalletTransactions(params: {
+  customerId?: string;
+  q?: string;
+  direction?: "credit" | "debit";
+  type?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<number> {
+  const { where, values } = buildWalletTxWhere(params);
+  const r = await pool.query<{ total: string }>(
+    `SELECT COUNT(*)::text AS total
+     FROM wallet.transactions t
+     JOIN wallet.wallets w ON w.id = t.wallet_id
+     JOIN auth.users u ON u.id = w.user_id
+     ${where}`,
+    values
+  );
+  return parseInt(r.rows[0]?.total ?? "0");
+}
