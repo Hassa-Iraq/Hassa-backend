@@ -19,6 +19,7 @@ export interface DriverProfileRow {
   is_active: boolean;
   approval_status: string;
   rejection_reason: string | null;
+  total_orders: number;
   created_by_user_id: string | null;
   created_at: Date;
   updated_at: Date;
@@ -239,12 +240,18 @@ export async function listDrivers(opts?: {
        dp.is_active,
        dp.approval_status,
        dp.rejection_reason,
+       COALESCE(ds.total_orders, 0)::int AS total_orders,
        dp.created_by_user_id,
        dp.created_at,
        dp.updated_at
      FROM auth.users u
      JOIN auth.roles ro ON ro.id = u.role_id
      JOIN auth.driver_profiles dp ON dp.user_id = u.id
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*) FILTER (WHERE d.status = 'delivered')::int AS total_orders
+       FROM delivery.deliveries d
+       WHERE d.driver_user_id = u.id
+     ) ds ON true
      ${where.where}
      ORDER BY dp.created_at DESC
      LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}`,
