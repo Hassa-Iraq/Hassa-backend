@@ -88,16 +88,70 @@ export async function findDriverById(userId: string): Promise<DriverProfileRow |
        dp.is_active,
        dp.approval_status,
        dp.rejection_reason,
+       COALESCE(ds.total_orders, 0)::int AS total_orders,
        dp.created_by_user_id,
        dp.created_at,
        dp.updated_at
      FROM auth.users u
      JOIN auth.roles ro ON ro.id = u.role_id
      JOIN auth.driver_profiles dp ON dp.user_id = u.id
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*) FILTER (WHERE d.status = 'delivered')::int AS total_orders
+       FROM delivery.deliveries d
+       WHERE d.driver_user_id = u.id
+     ) ds ON true
      WHERE u.id = $1`,
     [userId]
   );
   return (r.rows[0] as DriverProfileRow | undefined) ?? null;
+}
+
+export interface DriverStats {
+  total_orders: number;
+  cash_in_hand: number;
+  payable_balance: number;
+  total_withdrawn: number;
+  rating: number | null;
+}
+
+export async function getDriverStats(driverUserId: string): Promise<DriverStats> {
+  const [ordersR, cashR, walletR, withdrawnR] = await Promise.all([
+    pool.query<{ total: number }>(
+      "SELECT COUNT(*) FILTER (WHERE status = 'delivered')::int AS total FROM delivery.deliveries WHERE driver_user_id = $1",
+      [driverUserId]
+    ),
+    pool.query<{ total: string }>(
+      `SELECT COALESCE(SUM(o.total_amount), 0)::text AS total
+       FROM delivery.deliveries d
+       JOIN orders.orders o ON o.id = d.order_id
+       WHERE d.driver_user_id = $1
+         AND d.status = 'delivered'
+         AND o.payment_type = 'cash'
+         AND o.status = 'delivered'`,
+      [driverUserId]
+    ),
+    pool.query<{ balance: string }>(
+      "SELECT balance::text AS balance FROM wallet.wallets WHERE user_id = $1",
+      [driverUserId]
+    ),
+    pool.query<{ total: string }>(
+      "SELECT COALESCE(SUM(amount), 0)::text AS total FROM wallet.payouts WHERE user_id = $1 AND status = 'approved'",
+      [driverUserId]
+    ),
+  ]);
+
+  const totalOrders = ordersR.rows[0]?.total ?? 0;
+  const cashInHand = parseFloat(cashR.rows[0]?.total ?? "0");
+  const payableBalance = parseFloat(walletR.rows[0]?.balance ?? "0");
+  const totalWithdrawn = parseFloat(withdrawnR.rows[0]?.total ?? "0");
+
+  return {
+    total_orders: totalOrders,
+    cash_in_hand: cashInHand,
+    payable_balance: payableBalance,
+    total_withdrawn: totalWithdrawn,
+    rating: null,
+  };
 }
 
 export async function updateDriverProfile(
