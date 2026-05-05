@@ -2071,7 +2071,10 @@ export const getDriverById = async (req: AuthRequest, res: Response) => {
         data: null,
       });
     }
-    const driver = await DriverProfile.findDriverById(id);
+    const [driver, stats] = await Promise.all([
+      DriverProfile.findDriverById(id),
+      DriverProfile.getDriverStats(id),
+    ]);
     if (!driver) {
       return res.status(404).json({
         success: false,
@@ -2097,7 +2100,15 @@ export const getDriverById = async (req: AuthRequest, res: Response) => {
       success: true,
       status: "OK",
       message: "Driver retrieved",
-      data: { driver },
+      data: {
+        driver: {
+          ...driver,
+          driver_stats: {
+            ...stats,
+            rating: 0,
+          },
+        },
+      },
     });
   } catch (err) {
     return res.status(500).json({
