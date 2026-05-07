@@ -636,6 +636,75 @@ export async function countCustomers(filters: Omit<ListCustomersFilters, "limit"
   return r.rows[0]?.total ?? 0;
 }
 
+export async function listAllCustomers(params: {
+  limit: number;
+  offset: number;
+  search?: string;
+  date_from?: string;
+  date_to?: string;
+}): Promise<CustomerSummaryRow[]> {
+  const conditions: string[] = ["ro.name = 'customer'"];
+  const values: unknown[] = [];
+
+  if (params.search) {
+    conditions.push(
+      `(u.full_name ILIKE $${values.push(params.search)} OR u.email ILIKE $${values.length} OR u.phone ILIKE $${values.length})`
+    );
+  }
+
+  // Date filter applies to orders (customers who ordered in that range)
+  const orderConditions: string[] = [];
+  if (params.date_from) orderConditions.push(`o.created_at >= $${values.push(params.date_from)}`);
+  if (params.date_to) orderConditions.push(`o.created_at <= $${values.push(params.date_to + " 23:59:59")}`);
+  const orderFilter = orderConditions.length ? `AND ${orderConditions.join(" AND ")}` : "";
+
+  const r = await pool.query(
+    `SELECT
+       u.id                                                          AS user_id,
+       u.full_name,
+       u.email,
+       u.phone,
+       u.profile_picture_url,
+       COUNT(DISTINCT o.id)::int                                    AS total_orders,
+       COALESCE(SUM(o.total_amount), 0)::numeric::text             AS total_spent,
+       MIN(o.created_at)                                           AS first_order_at,
+       MAX(o.created_at)                                           AS last_order_at
+     FROM auth.users u
+     JOIN auth.roles ro ON ro.id = u.role_id
+     LEFT JOIN orders.orders o ON o.user_id = u.id ${orderFilter}
+     WHERE ${conditions.join(" AND ")}
+     GROUP BY u.id, u.full_name, u.email, u.phone, u.profile_picture_url
+     ORDER BY u.created_at DESC
+     LIMIT $${values.push(params.limit)} OFFSET $${values.push(params.offset)}`,
+    values
+  );
+  return r.rows as CustomerSummaryRow[];
+}
+
+export async function countAllCustomers(params: {
+  search?: string;
+  date_from?: string;
+  date_to?: string;
+}): Promise<number> {
+  const conditions: string[] = ["ro.name = 'customer'"];
+  const values: unknown[] = [];
+
+  if (params.search) {
+    conditions.push(
+      `(u.full_name ILIKE $${values.push(params.search)} OR u.email ILIKE $${values.length} OR u.phone ILIKE $${values.length})`
+    );
+  }
+
+  const r = await pool.query(
+    `SELECT COUNT(*)::int AS total
+     FROM auth.users u
+     JOIN auth.roles ro ON ro.id = u.role_id
+     WHERE ${conditions.join(" AND ")}`,
+    values
+  );
+  return r.rows[0]?.total ?? 0;
+}
+
 export async function updateStatus(
   id: string,
   status: OrderStatus,

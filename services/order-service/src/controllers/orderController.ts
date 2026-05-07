@@ -754,6 +754,33 @@ export async function listCustomers(req: AuthRequest, res: Response): Promise<vo
     const dateFrom = typeof req.query.date_from === "string" ? req.query.date_from : undefined;
     const dateTo = typeof req.query.date_to === "string" ? req.query.date_to : undefined;
 
+    if (req.user?.role === "admin") {
+      const [rows, total] = await Promise.all([
+        Order.listAllCustomers({ limit, offset, search, date_from: dateFrom, date_to: dateTo }),
+        Order.countAllCustomers({ search, date_from: dateFrom, date_to: dateTo }),
+      ]);
+      res.status(200).json({
+        success: true,
+        status: "OK",
+        message: "Customers listed",
+        data: {
+          customers: rows.map((row) => ({
+            user_id: row.user_id,
+            full_name: row.full_name,
+            email: row.email,
+            phone: row.phone,
+            profile_picture_url: row.profile_picture_url,
+            total_orders: row.total_orders,
+            total_spent: parseFloat(row.total_spent),
+            first_order_at: row.first_order_at,
+            last_order_at: row.last_order_at,
+          })),
+          pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+        },
+      });
+      return;
+    }
+
     const filters: Order.ListCustomersFilters = {
       limit,
       offset,
