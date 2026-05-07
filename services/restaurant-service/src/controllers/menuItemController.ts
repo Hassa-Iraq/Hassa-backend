@@ -21,7 +21,7 @@ async function ensureRestaurantOwnership(
     });
     return false;
   }
-  if (req.user!.id !== row.user_id) {
+  if (req.user?.role !== "admin" && req.user!.id !== row.user_id) {
     res.status(403).json({
       success: false,
       status: "ERROR",
