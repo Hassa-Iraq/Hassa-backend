@@ -266,6 +266,21 @@ export async function createOrder(req: AuthRequest, res: Response): Promise<void
     const restaurantId = body.restaurant_id;
     const incomingItems = body.items as IncomingOrderItem[] | undefined;
 
+    const isAdmin = req.user?.role === "admin";
+    const effectiveUserId = isAdmin
+      ? typeof body.customer_id === "string" ? body.customer_id.trim() : null
+      : req.user!.id;
+
+    if (isAdmin && !effectiveUserId) {
+      res.status(400).json({
+        success: false,
+        status: "ERROR",
+        message: "customer_id is required when admin creates an order",
+        data: null,
+      });
+      return;
+    }
+
     if (!restaurantId || typeof restaurantId !== "string") {
       res.status(400).json({
         success: false,
@@ -433,12 +448,12 @@ export async function createOrder(req: AuthRequest, res: Response): Promise<void
         return;
       }
       const trimmedAddressId = addressId.trim();
-      const ownedAddress = await DeliveryAddress.findUserAddressById(trimmedAddressId, req.user!.id);
+      const ownedAddress = await DeliveryAddress.findUserAddressById(trimmedAddressId, effectiveUserId!);
       if (!ownedAddress) {
         res.status(400).json({
           success: false,
           status: "ERROR",
-          message: "address_id is not a saved address for this user",
+          message: "address_id is not a saved address for this customer",
           data: null,
         });
         return;
@@ -448,10 +463,10 @@ export async function createOrder(req: AuthRequest, res: Response): Promise<void
 
     if (paymentType === "wallet") {
       await walletDebit({
-        userId: req.user!.id,
+        userId: effectiveUserId!,
         amount: totalAmount,
         referenceType: "order",
-        referenceId: req.user!.id,
+        referenceId: effectiveUserId!,
         note: `Payment for order at restaurant ${restaurantId}`,
       });
     }
@@ -459,14 +474,14 @@ export async function createOrder(req: AuthRequest, res: Response): Promise<void
     let created: Order.OrderWithItems;
     try {
       created = await Order.create({
-        user_id: req.user!.id,
+        user_id: effectiveUserId!,
         restaurant_id: restaurantId,
         subtotal: Number(subtotal.toFixed(2)),
         delivery_fee: deliveryFee,
         tax_amount: taxAmount,
         discount_amount: discountAmount,
         total_amount: totalAmount,
-        currency: typeof body.currency === "string" && body.currency.trim() ? body.currency.trim() : "PKR",
+        currency: typeof body.currency === "string" && body.currency.trim() ? body.currency.trim() : "IQD",
         order_type: orderType,
         payment_type: paymentType,
         notes: typeof body.notes === "string" ? body.notes : null,
@@ -476,10 +491,10 @@ export async function createOrder(req: AuthRequest, res: Response): Promise<void
     } catch (orderErr) {
       if (paymentType === "wallet") {
         await walletRefund({
-          userId: req.user!.id,
+          userId: effectiveUserId!,
           amount: totalAmount,
           referenceType: "order_creation_failed",
-          referenceId: req.user!.id,
+          referenceId: effectiveUserId!,
           note: "Refund: order creation failed",
         });
       }
