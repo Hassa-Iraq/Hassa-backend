@@ -14,8 +14,8 @@ router.post(
   upload.single("item_image"),
   menuItemController.uploadMenuItemImage
 );
-router.get("/", authenticate, authorize("restaurant"), menuItemController.listMenuItems);
-router.get("/:id", authenticate, authorize("restaurant"), menuItemController.getMenuItem);
+router.get("/", authenticate, authorize("admin", "restaurant"), menuItemController.listMenuItems);
+router.get("/:id", authenticate, authorize("admin", "restaurant"), menuItemController.getMenuItem);
 router.put("/:id", authenticate, authorize("restaurant"), menuItemController.updateMenuItem);
 router.delete("/:id", authenticate, authorize("restaurant"), menuItemController.deleteMenuItem);
 

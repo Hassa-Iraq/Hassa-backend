@@ -2906,7 +2906,11 @@ export const listAddresses = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const rows = await Address.listByUserId(req.user.id);
+    const targetUserId = req.user.role === "admin" && typeof req.query.user_id === "string"
+      ? req.query.user_id.trim()
+      : req.user.id;
+
+    const rows = await Address.listByUserId(targetUserId);
     return res.status(200).json({
       success: true,
       status: "OK",
