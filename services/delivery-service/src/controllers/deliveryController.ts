@@ -103,7 +103,7 @@ function internalAuthHeaders(): Record<string, string> {
 
 async function getOrderById(orderId: string, authHeader: string): Promise<OrderPayload> {
   const orderServiceUrl = config.ORDER_SERVICE_URL || "http://order-service:3003";
-  const response = await fetch(`${orderServiceUrl}/orders/${orderId}`, {
+  const response = await fetch(`${orderServiceUrl}/${orderId}`, {
     method: "GET",
     headers: {
       ...(authHeader ? { Authorization: authHeader } : {}),
