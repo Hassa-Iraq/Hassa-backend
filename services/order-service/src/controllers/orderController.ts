@@ -209,6 +209,26 @@ async function getOwnedRestaurantIds(authHeader: string): Promise<string[]> {
   return (json.data?.restaurants ?? []).map((r) => r.id);
 }
 
+async function fetchDeliveryInfo(orderId: string): Promise<Record<string, unknown> | null> {
+  try {
+    const deliveryServiceUrl = config.DELIVERY_SERVICE_URL || "http://delivery-service:3004";
+    const internalToken = config.INTERNAL_SERVICE_TOKEN;
+    if (!internalToken) return null;
+
+    const response = await fetch(`${deliveryServiceUrl}/internal/deliveries/by-order/${orderId}`, {
+      headers: { "X-Internal-Token": internalToken },
+    });
+    const json = (await response.json().catch(() => ({}))) as {
+      success?: boolean;
+      data?: { delivery?: Record<string, unknown> | null };
+    };
+    if (!response.ok || !json.success) return null;
+    return json.data?.delivery ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function ensureOrderAccess(req: AuthRequest, res: Response, orderId: string): Promise<Order.OrderRow | null> {
   const order = await Order.findById(orderId);
   if (!order) {
@@ -552,17 +572,23 @@ export async function getOrderById(req: AuthRequest, res: Response): Promise<voi
       ...details.order,
       delivery_address: (resolvedDa ?? null) as Record<string, unknown> | null,
     };
+
+    const deliveryInfo = await fetchDeliveryInfo(order.id);
+
     res.status(200).json({
       success: true,
       status: "OK",
       message: "Order retrieved",
       data: {
-        order: Order.toDetailsResponse(
-          orderForResponse,
-          details.items,
-          details.customer,
-          details.restaurant
-        ),
+        order: {
+          ...Order.toDetailsResponse(
+            orderForResponse,
+            details.items,
+            details.customer,
+            details.restaurant
+          ),
+          delivery: deliveryInfo,
+        },
       },
     });
   } catch (err) {

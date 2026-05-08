@@ -14,5 +14,6 @@ router.use((req, res, next) => {
 });
 
 router.post("/deliveries/assignments/auto", deliveryController.autoAssignForOrder);
+router.get("/internal/deliveries/by-order/:orderId", deliveryController.getDeliveryByOrderIdInternal);
 
 export default router;

@@ -1,4 +1,4 @@
-import { Response } from "express";
+import { Request, Response } from "express";
 import config from "../config/index";
 import * as Delivery from "../models/Delivery";
 import { AuthRequest } from "../middleware/auth";
@@ -618,6 +618,40 @@ export async function assignDriver(req: AuthRequest, res: Response): Promise<voi
       message: err instanceof Error ? err.message : "Failed to assign driver",
       data: null,
     });
+  }
+}
+
+export async function getDeliveryByOrderIdInternal(req: Request, res: Response): Promise<void> {
+  try {
+    const { orderId } = req.params;
+    const delivery = await Delivery.findByOrderId(orderId);
+    if (!delivery) {
+      res.status(200).json({ success: true, status: "OK", message: "No delivery found", data: { delivery: null } });
+      return;
+    }
+
+    // Fetch driver info from auth service
+    let driver = null;
+    try {
+      const authServiceUrl = config.AUTH_SERVICE_URL || "http://auth-service:3001";
+      const r = await fetch(`${authServiceUrl}/auth/drivers/${delivery.driver_user_id}`, {
+        headers: internalAuthHeaders(),
+      });
+      const json = (await r.json().catch(() => ({}))) as { success?: boolean; data?: { driver?: Record<string, unknown> } };
+      if (r.ok && json.success) driver = json.data?.driver ?? null;
+    } catch { /* ignore */ }
+
+    res.status(200).json({
+      success: true, status: "OK", message: "Delivery retrieved",
+      data: {
+        delivery: {
+          ...Delivery.toResponse(delivery),
+          driver,
+        },
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, status: "ERROR", message: err instanceof Error ? err.message : "Failed", data: null });
   }
 }
 
