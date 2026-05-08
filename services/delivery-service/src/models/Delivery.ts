@@ -215,6 +215,17 @@ export async function findByOrderId(order_id: string): Promise<DeliveryRow | nul
   return (r.rows[0] as DeliveryRow | undefined) ?? null;
 }
 
+export async function updateDriverUserId(id: string, driverUserId: string): Promise<DeliveryRow | null> {
+  const r = await pool.query(
+    `UPDATE delivery.deliveries
+     SET driver_user_id = $1, assigned_at = NOW()
+     WHERE id = $2
+     RETURNING *`,
+    [driverUserId, id]
+  );
+  return (r.rows[0] as DeliveryRow | undefined) ?? null;
+}
+
 export async function list(filters: DeliveryListFilters): Promise<DeliveryRow[]> {
   const where = buildWhere(filters);
   const values = [...where.values, filters.limit, filters.offset];
