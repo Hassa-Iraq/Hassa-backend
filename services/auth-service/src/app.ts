@@ -2,6 +2,7 @@ import express, { Express } from "express";
 import cors from "cors";
 import healthRoutes from "./routes/health";
 import authRoutes from "./routes/auth";
+import internalRoutes from "./routes/internal";
 import { BASE_UPLOAD_DIR } from "./utils/fileUpload";
 import { join } from "path";
 
@@ -30,5 +31,6 @@ app.use("/uploads/profile", express.static(join(BASE_UPLOAD_DIR, "profile")));
 app.use("/uploads/drivers", express.static(join(BASE_UPLOAD_DIR, "drivers")));
 app.use("/", healthRoutes);
 app.use("/auth", authRoutes);
+app.use("/", internalRoutes);
 
 export default app;

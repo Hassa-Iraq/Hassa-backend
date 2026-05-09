@@ -630,16 +630,20 @@ export async function getDeliveryByOrderIdInternal(req: Request, res: Response):
       return;
     }
 
-    // Fetch driver info from auth service
     let driver = null;
-    try {
-      const authServiceUrl = config.AUTH_SERVICE_URL || "http://auth-service:3001";
-      const r = await fetch(`${authServiceUrl}/auth/drivers/${delivery.driver_user_id}`, {
-        headers: internalAuthHeaders(),
-      });
-      const json = (await r.json().catch(() => ({}))) as { success?: boolean; data?: { driver?: Record<string, unknown> } };
-      if (r.ok && json.success) driver = json.data?.driver ?? null;
-    } catch { /* ignore */ }
+    if (delivery.driver_user_id) {
+      try {
+        const authServiceUrl = config.AUTH_SERVICE_URL || "http://auth-service:3001";
+        const r = await fetch(`${authServiceUrl}/internal/drivers/${delivery.driver_user_id}`, {
+          headers: internalAuthHeaders(),
+        });
+        const json = (await r.json().catch(() => ({}))) as {
+          success?: boolean;
+          data?: { driver?: Record<string, unknown> };
+        };
+        if (r.ok && json.success) driver = json.data?.driver ?? null;
+      } catch { /* ignore — delivery still returns without driver info */ }
+    }
 
     res.status(200).json({
       success: true, status: "OK", message: "Delivery retrieved",
