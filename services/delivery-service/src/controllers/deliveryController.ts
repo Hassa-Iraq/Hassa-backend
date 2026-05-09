@@ -634,15 +634,19 @@ export async function getDeliveryByOrderIdInternal(req: Request, res: Response):
     if (delivery.driver_user_id) {
       try {
         const authServiceUrl = config.AUTH_SERVICE_URL || "http://auth-service:3001";
-        const r = await fetch(`${authServiceUrl}/internal/drivers/${delivery.driver_user_id}`, {
-          headers: internalAuthHeaders(),
-        });
+        const url = `${authServiceUrl}/internal/drivers/${delivery.driver_user_id}`;
+        const headers = internalAuthHeaders();
+        console.log("[getDeliveryByOrderIdInternal] fetching driver:", url, "token set:", !!headers["X-Internal-Token"]);
+        const r = await fetch(url, { headers });
         const json = (await r.json().catch(() => ({}))) as {
           success?: boolean;
           data?: { driver?: Record<string, unknown> };
         };
+        console.log("[getDeliveryByOrderIdInternal] driver response:", r.status, JSON.stringify(json).slice(0, 200));
         if (r.ok && json.success) driver = json.data?.driver ?? null;
-      } catch { /* ignore — delivery still returns without driver info */ }
+      } catch (e) {
+        console.error("[getDeliveryByOrderIdInternal] driver fetch error:", e);
+      }
     }
 
     res.status(200).json({
