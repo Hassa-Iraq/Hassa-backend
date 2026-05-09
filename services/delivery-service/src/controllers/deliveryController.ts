@@ -501,11 +501,12 @@ export async function assignDriver(req: AuthRequest, res: Response): Promise<voi
 
     const existing = await Delivery.findByOrderId(orderId);
     if (existing) {
-      if (existing.status !== "pending_assignment") {
+      const reassignableStatuses = ["pending_assignment", "assigned"];
+      if (!reassignableStatuses.includes(existing.status)) {
         res.status(400).json({
           success: false,
           status: "ERROR",
-          message: `Cannot reassign — delivery is already ${existing.status}`,
+          message: `Cannot reassign — driver has already ${existing.status.replace(/_/g, " ")}`,
           data: { delivery: Delivery.toResponse(existing) },
         });
         return;
