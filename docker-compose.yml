@@ -83,6 +83,7 @@ services:
       SERVICE_NAME: auth-service
       USE_DEV_OTP: ${USE_DEV_OTP:-0}
       NOTIFICATION_SERVICE_URL: ${NOTIFICATION_SERVICE_URL:-http://notification-service:3006}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
     ports:
       - "${AUTH_SERVICE_PORT:-3001}:3001"
     depends_on:
