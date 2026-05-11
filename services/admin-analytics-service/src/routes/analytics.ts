@@ -12,14 +12,14 @@ router.get("/top-delivery-men", authenticate, authorize("admin"), analyticsContr
 router.get("/top-restaurants", authenticate, authorize("admin"), analyticsController.topRestaurants);
 router.get("/top-rated-food", authenticate, authorize("admin"), analyticsController.topRatedFood);
 router.get("/top-selling-food", authenticate, authorize("admin"), analyticsController.topSellingFood);
+router.get("/revenue-overview", authenticate, authorize("admin"), reportController.revenueOverview);
 
 // Reports
-router.get("/reports/revenue-overview", authenticate, authorize("admin"), reportController.revenueOverview);
-router.get("/reports/transactions",     authenticate, authorize("admin"), reportController.transactionReport);
-router.get("/reports/orders",       authenticate, authorize("admin"), reportController.orderReport);
-router.get("/reports/food",         authenticate, authorize("admin"), reportController.foodReport);
-router.get("/reports/restaurants",  authenticate, authorize("admin"), reportController.restaurantReport);
+router.get("/reports/transactions", authenticate, authorize("admin"), reportController.transactionReport);
+router.get("/reports/orders", authenticate, authorize("admin"), reportController.orderReport);
+router.get("/reports/food", authenticate, authorize("admin"), reportController.foodReport);
+router.get("/reports/restaurants", authenticate, authorize("admin"), reportController.restaurantReport);
 router.get("/reports/wallet/transactions", authenticate, authorize("admin"), reportController.walletTransactionReport);
-router.get("/reports/wallet/customers",    authenticate, authorize("admin"), reportController.walletCustomerOptions);
+router.get("/reports/wallet/customers", authenticate, authorize("admin"), reportController.walletCustomerOptions);
 
 export default router;
