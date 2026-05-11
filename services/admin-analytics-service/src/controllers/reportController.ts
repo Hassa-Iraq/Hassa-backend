@@ -72,6 +72,33 @@ export async function foodReport(req: Request, res: Response): Promise<void> {
   }
 }
 
+// GET /reports/orders
+export async function orderReport(req: Request, res: Response): Promise<void> {
+  try {
+    const { page, limit, offset } = parsePagination(req);
+    const { restaurantId, zone, dateFrom, dateTo } = parseFilters(req);
+    const customerId = typeof req.query.customer_id === "string" ? req.query.customer_id : undefined;
+    const search = typeof req.query.search === "string" ? req.query.search.trim() || undefined : undefined;
+
+    const [summary, rows, total] = await Promise.all([
+      Report.getOrderReportSummary({ zone, restaurantId, customerId, dateFrom, dateTo }),
+      Report.getOrderReportRows({ zone, restaurantId, customerId, dateFrom, dateTo, search, limit, offset }),
+      Report.countOrderReport({ zone, restaurantId, customerId, dateFrom, dateTo, search }),
+    ]);
+
+    res.status(200).json({
+      success: true, status: "OK", message: "Order report retrieved",
+      data: {
+        summary,
+        orders: rows,
+        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, status: "ERROR", message: err instanceof Error ? err.message : "Failed", data: null });
+  }
+}
+
 // GET /reports/restaurants
 export async function restaurantReport(req: Request, res: Response): Promise<void> {
   try {

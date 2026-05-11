@@ -519,3 +519,173 @@ export async function countWalletTransactions(params: {
   );
   return parseInt(r.rows[0]?.total ?? "0");
 }
+
+export interface OrderReportSummary {
+  total: number;
+  pending: number;
+  accepted: number;
+  processing: number;
+  food_on_the_way: number;
+  delivered: number;
+  cancelled: number;
+  refunded: number;
+  payment_failed: number;
+  scheduled: number;
+}
+
+export interface OrderReportRow {
+  order_id: string;
+  order_number: string;
+  restaurant_name: string;
+  customer_name: string | null;
+  customer_phone: string | null;
+  subtotal: number;
+  discount_amount: number;
+  coupon_discount: number;
+  referral_discount: number;
+  tax_amount: number;
+  delivery_fee: number;
+  service_charge: number;
+  total_amount: number;
+  payment_type: string;
+  order_type: string;
+  status: string;
+  placed_at: string;
+}
+
+export async function getOrderReportSummary(params: {
+  zone?: string;
+  restaurantId?: string;
+  customerId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<OrderReportSummary> {
+  const values: unknown[] = [];
+  const conditions: string[] = [];
+
+  if (params.restaurantId) conditions.push(`o.restaurant_id = $${values.push(params.restaurantId)}`);
+  if (params.customerId)   conditions.push(`o.user_id = $${values.push(params.customerId)}`);
+  if (params.zone)         conditions.push(`r.zone ILIKE $${values.push(`%${params.zone}%`)}`);
+  const df = buildDateFilter(values, params.dateFrom, params.dateTo);
+  if (df) conditions.push(df);
+
+  const where = conditions.length
+    ? `WHERE ${conditions.join(" AND ")}`
+    : "";
+
+  const r = await pool.query<{
+    total: string; pending: string; accepted: string; processing: string;
+    food_on_the_way: string; delivered: string; cancelled: string; refunded: string;
+  }>(
+    `SELECT
+       COUNT(*)::text                                                                         AS total,
+       COUNT(*) FILTER (WHERE o.status = 'pending')::text                                    AS pending,
+       COUNT(*) FILTER (WHERE o.status = 'confirmed')::text                                  AS accepted,
+       COUNT(*) FILTER (WHERE o.status IN ('preparing','ready_for_pickup'))::text            AS processing,
+       COUNT(*) FILTER (WHERE o.status = 'out_for_delivery')::text                          AS food_on_the_way,
+       COUNT(*) FILTER (WHERE o.status = 'delivered')::text                                  AS delivered,
+       COUNT(*) FILTER (WHERE o.status = 'cancelled')::text                                  AS cancelled,
+       COUNT(*) FILTER (WHERE o.status = 'cancelled' AND o.payment_type = 'wallet')::text   AS refunded
+     FROM orders.orders o
+     JOIN restaurant.restaurants r ON r.id = o.restaurant_id
+     ${where}`,
+    values
+  );
+
+  const row = r.rows[0];
+  return {
+    total:           parseInt(row?.total          ?? "0"),
+    pending:         parseInt(row?.pending         ?? "0"),
+    accepted:        parseInt(row?.accepted        ?? "0"),
+    processing:      parseInt(row?.processing      ?? "0"),
+    food_on_the_way: parseInt(row?.food_on_the_way ?? "0"),
+    delivered:       parseInt(row?.delivered       ?? "0"),
+    cancelled:       parseInt(row?.cancelled       ?? "0"),
+    refunded:        parseInt(row?.refunded        ?? "0"),
+    payment_failed:  0,
+    scheduled:       0,
+  };
+}
+
+export async function getOrderReportRows(params: {
+  zone?: string;
+  restaurantId?: string;
+  customerId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  search?: string;
+  limit: number;
+  offset: number;
+}): Promise<OrderReportRow[]> {
+  const values: unknown[] = [];
+  const conditions: string[] = [];
+
+  if (params.restaurantId) conditions.push(`o.restaurant_id = $${values.push(params.restaurantId)}`);
+  if (params.customerId)   conditions.push(`o.user_id = $${values.push(params.customerId)}`);
+  if (params.zone)         conditions.push(`r.zone ILIKE $${values.push(`%${params.zone}%`)}`);
+  if (params.search)       conditions.push(`(o.order_number ILIKE $${values.push(`%${params.search}%`)} OR u.full_name ILIKE $${values.length})`);
+  const df = buildDateFilter(values, params.dateFrom, params.dateTo);
+  if (df) conditions.push(df);
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const r = await pool.query<OrderReportRow>(
+    `SELECT
+       o.id                          AS order_id,
+       o.order_number,
+       r.name                        AS restaurant_name,
+       u.full_name                   AS customer_name,
+       u.phone                       AS customer_phone,
+       o.subtotal::float             AS subtotal,
+       o.discount_amount::float      AS discount_amount,
+       0                             AS coupon_discount,
+       0                             AS referral_discount,
+       o.tax_amount::float           AS tax_amount,
+       o.delivery_fee::float         AS delivery_fee,
+       0                             AS service_charge,
+       o.total_amount::float         AS total_amount,
+       o.payment_type,
+       o.order_type,
+       o.status,
+       o.placed_at
+     FROM orders.orders o
+     JOIN restaurant.restaurants r ON r.id = o.restaurant_id
+     JOIN auth.users u              ON u.id = o.user_id
+     ${where}
+     ORDER BY o.placed_at DESC
+     LIMIT $${values.push(params.limit)} OFFSET $${values.push(params.offset)}`,
+    values
+  );
+  return r.rows;
+}
+
+export async function countOrderReport(params: {
+  zone?: string;
+  restaurantId?: string;
+  customerId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  search?: string;
+}): Promise<number> {
+  const values: unknown[] = [];
+  const conditions: string[] = [];
+
+  if (params.restaurantId) conditions.push(`o.restaurant_id = $${values.push(params.restaurantId)}`);
+  if (params.customerId)   conditions.push(`o.user_id = $${values.push(params.customerId)}`);
+  if (params.zone)         conditions.push(`r.zone ILIKE $${values.push(`%${params.zone}%`)}`);
+  if (params.search)       conditions.push(`(o.order_number ILIKE $${values.push(`%${params.search}%`)} OR u.full_name ILIKE $${values.length})`);
+  const df = buildDateFilter(values, params.dateFrom, params.dateTo);
+  if (df) conditions.push(df);
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const r = await pool.query<{ total: string }>(
+    `SELECT COUNT(*)::text AS total
+     FROM orders.orders o
+     JOIN restaurant.restaurants r ON r.id = o.restaurant_id
+     JOIN auth.users u              ON u.id = o.user_id
+     ${where}`,
+    values
+  );
+  return parseInt(r.rows[0]?.total ?? "0");
+}
