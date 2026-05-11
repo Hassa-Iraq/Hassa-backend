@@ -17,6 +17,20 @@ function parseFilters(req: Request) {
   };
 }
 
+// GET /reports/revenue-overview
+export async function revenueOverview(req: Request, res: Response): Promise<void> {
+  try {
+    const year = typeof req.query.year === "string" ? parseInt(req.query.year) : new Date().getFullYear();
+    const result = await Report.getRevenueOverview({ year });
+    res.status(200).json({
+      success: true, status: "OK", message: "Revenue overview retrieved",
+      data: { year, ...result },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, status: "ERROR", message: err instanceof Error ? err.message : "Failed", data: null });
+  }
+}
+
 // GET /reports/transactions
 export async function transactionReport(req: Request, res: Response): Promise<void> {
   try {

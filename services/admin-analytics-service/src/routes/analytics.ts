@@ -14,7 +14,8 @@ router.get("/top-rated-food", authenticate, authorize("admin"), analyticsControl
 router.get("/top-selling-food", authenticate, authorize("admin"), analyticsController.topSellingFood);
 
 // Reports
-router.get("/reports/transactions", authenticate, authorize("admin"), reportController.transactionReport);
+router.get("/reports/revenue-overview", authenticate, authorize("admin"), reportController.revenueOverview);
+router.get("/reports/transactions",     authenticate, authorize("admin"), reportController.transactionReport);
 router.get("/reports/orders",       authenticate, authorize("admin"), reportController.orderReport);
 router.get("/reports/food",         authenticate, authorize("admin"), reportController.foodReport);
 router.get("/reports/restaurants",  authenticate, authorize("admin"), reportController.restaurantReport);

@@ -689,3 +689,67 @@ export async function countOrderReport(params: {
   );
   return parseInt(r.rows[0]?.total ?? "0");
 }
+
+// ─────────────────────────────────────────────────────────────
+// REVENUE OVERVIEW (monthly chart)
+// ─────────────────────────────────────────────────────────────
+export interface RevenueOverviewMonth {
+  month: string;
+  month_number: number;
+  total_sells: number;
+  admission_commission: number;
+  subscriptions: number;
+}
+
+export interface RevenueOverviewSummary {
+  total_sells: number;
+  admission_commission: number;
+  subscriptions: number;
+}
+
+export async function getRevenueOverview(params: {
+  year?: number;
+}): Promise<{ summary: RevenueOverviewSummary; monthly: RevenueOverviewMonth[] }> {
+  const year = params.year ?? new Date().getFullYear();
+
+  const r = await pool.query<{
+    month_number: string;
+    month_name: string;
+    total_sells: string;
+    admission_commission: string;
+  }>(
+    `SELECT
+       EXTRACT(MONTH FROM placed_at)::int  AS month_number,
+       TO_CHAR(placed_at, 'Mon')           AS month_name,
+       COALESCE(SUM(total_amount), 0)      AS total_sells,
+       COALESCE(SUM(total_amount * $1), 0) AS admission_commission
+     FROM orders.orders
+     WHERE status = 'delivered'
+       AND EXTRACT(YEAR FROM placed_at) = $2
+     GROUP BY month_number, month_name
+     ORDER BY month_number ASC`,
+    [COMMISSION, year]
+  );
+
+  const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const dataMap = new Map(r.rows.map(row => [parseInt(row.month_number), row]));
+
+  const monthly: RevenueOverviewMonth[] = monthNames.map((name, idx) => {
+    const row = dataMap.get(idx + 1);
+    return {
+      month:                name,
+      month_number:         idx + 1,
+      total_sells:          row ? parseFloat(row.total_sells)          : 0,
+      admission_commission: row ? parseFloat(row.admission_commission) : 0,
+      subscriptions:        0,
+    };
+  });
+
+  const summary: RevenueOverviewSummary = {
+    total_sells:          parseFloat(monthly.reduce((s, m) => s + m.total_sells, 0).toFixed(2)),
+    admission_commission: parseFloat(monthly.reduce((s, m) => s + m.admission_commission, 0).toFixed(2)),
+    subscriptions:        0,
+  };
+
+  return { summary, monthly };
+}
